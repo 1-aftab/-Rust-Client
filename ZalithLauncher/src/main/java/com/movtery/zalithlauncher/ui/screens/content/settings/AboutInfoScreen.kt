@@ -61,12 +61,8 @@ import com.movtery.zalithlauncher.game.plugin.appCacheIcon
 import com.movtery.zalithlauncher.launcherName
 import com.movtery.zalithlauncher.library.LibraryInfo
 import com.movtery.zalithlauncher.library.libraryData
-import com.movtery.zalithlauncher.path.URL_COMMUNITY
 import com.movtery.zalithlauncher.viewmodel.isLauncherUpgradeCheckAvailable
 import com.movtery.zalithlauncher.path.URL_MCMOD
-import com.movtery.zalithlauncher.path.URL_PROJECT
-import com.movtery.zalithlauncher.path.URL_SUPPORT
-import com.movtery.zalithlauncher.path.URL_WEBLATE
 import com.movtery.zalithlauncher.ui.base.BaseScreen
 import com.movtery.zalithlauncher.ui.components.AnimatedLazyColumn
 import com.movtery.zalithlauncher.ui.components.CardTitleLayout
@@ -133,26 +129,15 @@ fun AboutInfoScreen(
                             icon = painterResource(R.drawable.ic_copyright_outlined),
                             title = stringResource(R.string.rust_client_unofficial_title),
                             text = stringResource(R.string.rust_client_unofficial_text, BuildKeys.LAUNCHER_NAME, launcherName),
-                            button = {
-                                Button(
-                                    onClick = { openLink(URL_PROJECT) }
-                                ) {
-                                    Text(text = stringResource(R.string.rust_client_upstream_link))
-                                }
-                            }
+                            button = {}
                         )
 
                         ButtonIconItem(
                             icon = painterResource(R.drawable.img_avatar_movtery),
                             title = stringResource(R.string.about_launcher_author_movtery_title),
                             text = stringResource(R.string.about_launcher_author_movtery_text, launcherName),
-                            button = {
-                                Button(
-                                    onClick = { openLink(URL_SUPPORT) }
-                                ) {
-                                    Text(text = stringResource(R.string.about_sponsor))
-                                }
-                            }
+                            //Rust Client: credit kept, no donation link
+                            button = {}
                         )
                     }
                 }
@@ -165,19 +150,6 @@ fun AboutInfoScreen(
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         val launcherName = remember { launcherName() }
-
-                        ButtonIconItem(
-                            icon = painterResource(R.drawable.img_sponsor),
-                            title = stringResource(R.string.about_sponsors_title),
-                            text = stringResource(R.string.about_sponsors_summary, launcherName),
-                            button = {
-                                Button(
-                                    onClick = onViewSponsors
-                                ) {
-                                    Text(text = stringResource(R.string.generic_view))
-                                }
-                            }
-                        )
 
                         ButtonIconItem(
                             icon = painterResource(R.drawable.img_avatar_bangbang93),
@@ -242,19 +214,6 @@ fun AboutInfoScreen(
                             text = stringResource(R.string.about_acknowledgements_pojav_text, BuildKeys.LAUNCHER_SHORT_NAME),
                             openLicense = { openLicense(R.raw.lgpl_3_license) },
                             openLink = { openLink("https://github.com/PojavLauncherTeam/PojavLauncher") }
-                        )
-                        LinkIconItem(
-                            icon = painterResource(R.drawable.ic_github),
-                            title = stringResource(R.string.about_acknowledgements_github_community),
-                            text = stringResource(R.string.about_acknowledgements_github_community_text),
-                            openLink = { openLink(URL_COMMUNITY) },
-                            useImage = false
-                        )
-                        LinkIconItem(
-                            icon = painterResource(R.drawable.img_platform_weblate),
-                            title = stringResource(R.string.about_acknowledgements_weblate_community),
-                            text = stringResource(R.string.about_acknowledgements_weblate_community_text),
-                            openLink = { openLink(URL_WEBLATE) }
                         )
                     }
                 }

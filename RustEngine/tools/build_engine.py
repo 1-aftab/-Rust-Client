@@ -79,7 +79,21 @@ def fetch(pins):
     patches = sorted(PATCHES.glob("*.patch"))
     for patch in patches:
         run("git", "apply", "--index", "--whitespace=nowarn", patch, cwd=SOURCE)
+    rebrand()
     return [p.name for p in patches]
+
+
+def rebrand():
+    """The engine's translated texts name the host launcher, which is what the player
+    installed. The credits lines keep the engine's authors and licence as they are."""
+    import json
+    for path in sorted((SOURCE / "crates/horizon-client/assets/horizon/lang").glob("*.json")):
+        texts = json.loads(path.read_text(encoding="utf-8"))
+        for key, text in texts.items():
+            if key.startswith("starling.credits") or not isinstance(text, str):
+                continue
+            texts[key] = text.replace("Starling", "Rust Client").replace("Horizon", "Rust Client")
+        path.write_text(json.dumps(texts, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def upstream():

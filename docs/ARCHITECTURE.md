@@ -108,7 +108,7 @@ its account screens. Rust Client therefore hosts it rather than embeds it:
 | Game window, rendering, title screen, menus, inventory, settings | Starling, unchanged |
 | On-screen controls **while a world is played** | Rust Client: the Zalith control layout |
 | Touch in menus and the inventory | Starling's own touch handling |
-| Player name | the launcher's current account name, handed over at start |
+| Player name and skin | the launcher's current account, handed over at every start |
 
 ### Pieces
 
@@ -134,6 +134,15 @@ the engine library without its game and runs the engine's own downloader and pre
 `EngineSetup` (patch `0002-rust-client-host-setup.patch`), polling it for progress. Once done, the
 game starts and loads straight into its title screen. The engine's built-in set-up screen remains
 as a fallback if the prepared resources fail to load.
+
+### Accounts and skin
+
+The launcher is the only place accounts and skins are managed. At every start `RustEdition.launch`
+writes the current account's name and skin into the engine's files (`horizon-args.txt`,
+`<game folder>/horizon-player.txt`, `skins/launcher.png`) and sets `RUST_CLIENT_HOST_ACCOUNTS=1`.
+Patch `0003` makes the engine honour that: no account button on its title screen, and its Skin
+Customization page keeps only vanilla's rows. The same patch stops the engine drawing its own
+on-screen controls; the launcher's control layout is the only one.
 
 ### Controls
 
@@ -187,7 +196,6 @@ build, the engine was built with NDK 28).
 
 - ARM64 only, Vulkan 1.3 only, Minecraft 26.3 only.
 - No Java mods; Starling has its own mod formats.
-- Starling's built-in account screens exist beside the launcher's accounts; only the name is passed.
 - The engine downloads Minecraft's assets from Mojang at first start and needs network for that.
 - CI builds the engine with upstream's `quick` profile (no LTO), which is slower at run time than
   upstream's release builds.

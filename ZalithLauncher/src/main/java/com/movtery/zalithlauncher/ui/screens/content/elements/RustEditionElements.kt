@@ -193,7 +193,7 @@ fun RustVersionsContent(modifier: Modifier = Modifier) {
                     runCatching {
                         RustEdition.launch(
                             context = context,
-                            playerName = AccountsManager.currentAccountFlow.value?.username
+                            account = AccountsManager.currentAccountFlow.value
                         )
                     }
                 }
