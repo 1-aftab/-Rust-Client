@@ -125,6 +125,16 @@ its account screens. Rust Client therefore hosts it rather than embeds it:
 - `setting/AllSettings.gameEdition` persists the choice; `GameEditionCard` (home screen) changes
   it; `LauncherScreen.VersionsContent` starts the chosen edition.
 
+### Game resources (first start)
+
+Starling ships no Minecraft files; they are fetched from Mojang and prepared on the device. In
+Rust Client this is shown by the launcher, not by the engine: when `<filesDir>/rust-engine/resources`
+is missing, the launch button opens `RustSetupActivity` (Compose, process `:rustsetup`). It loads
+the engine library without its game and runs the engine's own downloader and preparer through
+`EngineSetup` (patch `0002-rust-client-host-setup.patch`), polling it for progress. Once done, the
+game starts and loads straight into its title screen. The engine's built-in set-up screen remains
+as a fallback if the prepared resources fail to load.
+
 ### Controls
 
 A `NativeActivity` owns its window's surface, so no view can be drawn over the game in the same

@@ -23,6 +23,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import io.github.juanluci.starling.EngineHost
+import io.github.juanluci.starling.EngineSetup
 import java.io.File
 
 /**
@@ -103,8 +104,13 @@ object RustEdition {
     fun launch(context: Context, playerName: String?) {
         runCatching { writePlayerName(context, playerName) }
         gameFolder(context).mkdirs()
-        val intent = Intent(context, RustGameActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Game files not prepared yet: the launcher's own download screen first. The engine's
+        // window opens only once there is a game to show.
+        val intent = if (EngineSetup.prepared(context)) {
+            Intent(context, RustGameActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        } else {
+            RustSetupActivity.intent(context)
+        }
         context.startActivity(intent)
     }
 

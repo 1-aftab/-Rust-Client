@@ -46,4 +46,24 @@
     <string name="rust_edition_folder_shader_packs">Shader packs</string>
     <string name="rust_edition_folder_data_packs">Data packs</string>
     <string name="rust_edition_folder_screenshots">Screenshots</string>
+
+    <!-- Download screen of the Rust Edition (RustSetupActivity) -->
+    <string name="rust_setup_title">Rust Edition game resources</string>
+    <!-- %1$s is the Minecraft version -->
+    <string name="rust_setup_summary">The Rust Edition needs the files of Minecraft %1$s. They are downloaded from Mojang and prepared on this device once; this takes a while and several hundred megabytes. Keep this screen open until it is done.</string>
+    <string name="rust_setup_download">Download</string>
+    <string name="rust_setup_retry">Try again</string>
+    <string name="rust_setup_stop">Stop</string>
+    <string name="rust_setup_close">Close</string>
+    <string name="rust_setup_done">The game resources are ready.</string>
+    <!-- %1$s is the reason, in the engine's words -->
+    <string name="rust_setup_failed">It did not work: %1$s</string>
+    <string name="rust_setup_stage_starting">Starting</string>
+    <string name="rust_setup_stage_checking">Checking the game files</string>
+    <string name="rust_setup_stage_download">Downloading the game files</string>
+    <string name="rust_setup_stage_java">Downloading the Java runtime used for the preparation</string>
+    <string name="rust_setup_stage_unpacking">Unpacking the Java runtime</string>
+    <string name="rust_setup_stage_preparing">Preparing the game resources</string>
+    <!-- %1$s is "12 MB / 340 MB", %2$s is "120/3400" (files) -->
+    <string name="rust_setup_files">%1$s · files %2$s</string>
 </resources>

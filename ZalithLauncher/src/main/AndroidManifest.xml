@@ -140,6 +140,15 @@
                 android:name="android.app.func_name"
                 android:value="starling_on_create" />
         </activity>
+        <!-- Rust Client: the launcher's download screen of the Rust Edition. A process of its
+             own, which ends with the screen (see RustSetupActivity). -->
+        <activity
+            android:name=".game.rust.RustSetupActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation|uiMode|density|fontScale"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:process=":rustsetup"
+            android:screenOrientation="sensorLandscape" />
         <activity android:name=".ui.activities.ErrorActivity"
             android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation"
             android:screenOrientation="sensorLandscape" />
