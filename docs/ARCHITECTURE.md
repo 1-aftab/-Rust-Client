@@ -50,7 +50,7 @@ Rust, the Android targets and `cargo-ndk`, then runs `ZalithLauncher:assemble<Va
 6. Inside the JVM, the patched LWJGL/GLFW talks back to `libpojavexec.so`: `egl_bridge.c` and
    `ctxbridges/` provide the GL/Vulkan surface, `input_bridge_v3.c` provides the input queue.
 
-Game files live in a "game path" (`game/path`), `<filesDir>/games/.minecraft` by default, with the
+Game files live in a "game path" (`game/path`), `<externalFilesDir>/.minecraft` by default, with the
 standard `versions/`, `libraries/`, `assets/` layout. Per-version isolation puts `mods/`,
 `resourcepacks/`, `shaderpacks/`, `saves/` inside the version folder.
 
@@ -83,10 +83,11 @@ sink (`lwjglEvent`, `CallbackBridge`) is tied to the JVM.
 
 | Path | Content |
 |---|---|
-| `<filesDir>/games/` | Default game path, runtimes (`runtimes/`), account skins/capes, `minecraft_versions.json` |
+| `<externalFilesDir>/.minecraft/` | Default game path (users can add others) |
+| `<filesDir>/games/` | Java runtimes (`runtimes/`), account skins/capes, `minecraft_versions.json` |
 | `<filesDir>/components/` | Unpacked LWJGL, auth libs, Caciocavallo |
 | `<filesDir>/settings.json`, MMKV | Launcher settings |
-| `<dataDir>/databases/` | Accounts (Room + SQLCipher), game paths |
+| `<dataDir>/databases/` | Room databases: accounts, game paths |
 | `<externalFilesDir>/control_layouts/`, `logs/` | Control layouts, logs |
 
 ## 6. Rust Edition: current state
