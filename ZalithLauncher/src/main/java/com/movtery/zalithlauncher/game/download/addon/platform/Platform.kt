@@ -19,6 +19,7 @@
 package com.movtery.zalithlauncher.game.download.addon.platform
 
 import android.os.Parcelable
+import com.movtery.zalithlauncher.BuildKeys
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -32,5 +33,22 @@ enum class Platform(val displayName: String): Parcelable {
     @SerialName("CURSEFORGE")
     CURSEFORGE("CurseForge"),
     @SerialName("MODRINTH")
-    MODRINTH("Modrinth")
+    MODRINTH("Modrinth");
+
+    /**
+     * [Rust Client] Whether this platform can be used by this build.
+     * CurseForge requires an API key which this build does not ship,
+     * so it is reported as not working instead of failing silently.
+     */
+    val isWorking: Boolean
+        get() = when (this) {
+            CURSEFORGE -> BuildKeys.CURSEFORGE_API.isNotBlank()
+            MODRINTH -> true
+        }
+
+    /**
+     * [Rust Client] The name shown in platform selectors
+     */
+    val selectorLabel: String
+        get() = if (isWorking) displayName else "$displayName (not working)"
 }

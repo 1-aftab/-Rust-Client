@@ -484,7 +484,7 @@ private fun FavoritesFilter(
                     }
                 },
                 getItemLabel = { item ->
-                    item?.displayName ?: stringResource(R.string.generic_all)
+                    item?.selectorLabel ?: stringResource(R.string.generic_all)
                 },
                 title = stringResource(R.string.download_addon_filter_search_platform),
                 cancelable = false

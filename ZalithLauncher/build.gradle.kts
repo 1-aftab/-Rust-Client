@@ -20,6 +20,8 @@ val launcherAPPName = project.findProperty("launcher_app_name") as? String ?: er
 val launcherName = project.findProperty("launcher_name") as? String ?: error("The \"launcher_name\" property is not set in gradle.properties.")
 val launcherShortName = project.findProperty("launcher_short_name") as? String ?: error("The \"launcher_short_name\" property is not set in gradle.properties.")
 val launcherUrl = project.findProperty("url_home") as? String ?: error("The \"url_home\" property is not set in gradle.properties.")
+val launcherApplicationId = project.findProperty("launcher_application_id") as? String ?: error("The \"launcher_application_id\" property is not set in gradle.properties.")
+val launcherUpgradeInfoUrl = (project.findProperty("upgrade_info_url") as? String).orEmpty().trim()
 
 val launcherVersionCode = (project.findProperty("launcher_version_code") as? String)?.toIntOrNull() ?: error("The \"launcher_version_code\" property is not set as an integer in gradle.properties.")
 val launcherVersionName = project.findProperty("launcher_version_name") as? String ?: error("The \"launcher_version_name\" property is not set in gradle.properties.")
@@ -41,6 +43,15 @@ fun getKeyFromLocal(envKey: String, fileName: String? = null, default: String? =
         ""
     }
 }
+
+/**
+ * [Rust Client] The keystore used to sign release builds, if one was supplied.
+ * Without it the release APK is left unsigned so that it can be signed manually.
+ */
+val releaseStoreFile: File? = System.getenv("RELEASE_STORE_FILE")
+    ?.takeIf { it.isNotBlank() }
+    ?.let { File(it) }
+    ?.takeIf { it.isFile }
 
 fun File.sha1Hex(): String {
     val digest = MessageDigest.getInstance("SHA-1")
@@ -114,11 +125,17 @@ android {
     }
 
     signingConfigs {
-        create("releaseBuild") {
-            storeFile = file("zalith_launcher.jks")
-            storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
-            keyAlias = "movtery_zalith"
-            keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
+        // [Rust Client] Release builds are signed by hand (see docs/SIGNING.md).
+        // A release signing config only exists when a keystore is supplied through
+        // RELEASE_STORE_FILE / STORE_PASSWORD / RELEASE_KEY_ALIAS / KEY_PASSWORD;
+        // otherwise Gradle produces an unsigned release APK.
+        if (releaseStoreFile != null) {
+            create("releaseBuild") {
+                storeFile = releaseStoreFile
+                storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "rust_client"
+                keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
+            }
         }
         create("debugBuild") {
             storeFile = file("zalith_launcher_debug.jks")
@@ -129,8 +146,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = zalithPackageName
-        applicationIdSuffix = ".v2"
+        applicationId = launcherApplicationId
         minSdk = 26
         targetSdk = 34
         versionCode = launcherVersionCode
@@ -142,7 +158,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("releaseBuild")
+            signingConfig = signingConfigs.findByName("releaseBuild")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -277,7 +293,11 @@ androidComponents {
 
                 (output.getFilter(ABI)?.identifier ?: "all").let { abi ->
                     val baseName = "$launcherName-${if (variant.buildType == "release") launcherVersionName else "Debug-$launcherVersionName"}"
-                    output.outputFileName = if (abi == "all") "$baseName.apk" else "$baseName-$abi.apk"
+                    // [Rust Client] make it obvious that a release APK still has to be signed
+                    val unsigned = variant.buildType == "release" && releaseStoreFile == null
+                    val fullName = (if (abi == "all") baseName else "$baseName-$abi") +
+                        (if (unsigned) "-unsigned" else "")
+                    output.outputFileName = "$fullName.apk"
                 }
             }
         }
@@ -300,6 +320,7 @@ buildKeys {
     string("LAUNCHER_IDENTIFIER", launcherName, true)
     string("LAUNCHER_SHORT_NAME", launcherShortName, true)
     string("URL_HOME", launcherUrl, true)
+    string("UPGRADE_INFO_URL", launcherUpgradeInfoUrl, true)
     string("CURSEFORGE_API", getKeyFromLocal("CURSEFORGE_API_KEY", ".curseforge_api.txt", defaultCurseForgeApiKey), true)
     string("BUILD_ARCH", projectArch)
 }
@@ -350,6 +371,7 @@ dependencies {
     implementation(project(":InputMap"))
     implementation(project(":Guide"))
     implementation(project(":PetLib"))
+    implementation(project(":RustEngine"))
     //Utils
     implementation(libs.bytehook)
     implementation(libs.gson)

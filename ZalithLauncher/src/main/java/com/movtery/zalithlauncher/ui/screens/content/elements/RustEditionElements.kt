@@ -1,0 +1,189 @@
+/*
+ * Rust Client
+ * An unofficial modified version of Zalith Launcher 2.
+ * Zalith Launcher 2 is Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ * See the GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.txt>.
+ */
+
+package com.movtery.zalithlauncher.ui.screens.content.elements
+
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.movtery.zalithlauncher.R
+import com.movtery.zalithlauncher.filemanager.FileManagerLauncher
+import com.movtery.zalithlauncher.game.rust.GameEdition
+import com.movtery.zalithlauncher.game.rust.RustEdition
+import com.movtery.zalithlauncher.setting.AllSettings
+import com.movtery.zalithlauncher.ui.components.BackgroundCard
+
+/** The text that explains why the Rust Edition cannot start */
+@Composable
+fun rustEditionProblemText(problem: RustEdition.Problem): String = when (problem) {
+    RustEdition.Problem.NOT_INCLUDED -> stringResource(R.string.rust_edition_problem_not_included)
+    RustEdition.Problem.NO_VULKAN -> stringResource(R.string.rust_edition_problem_no_vulkan)
+}
+
+/**
+ * Home screen card: chooses between the Java Edition and the Rust Edition.
+ * The choice is kept in the settings and decides what the launch button starts.
+ */
+@Composable
+fun GameEditionCard(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val edition = AllSettings.gameEdition.state
+    val problem = remember { RustEdition.problem(context) }
+
+    BackgroundCard(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.game_edition_title),
+                style = MaterialTheme.typography.titleSmall
+            )
+
+            val editions = GameEdition.entries
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                editions.forEachIndexed { index, item ->
+                    SegmentedButton(
+                        selected = edition == item,
+                        onClick = { AllSettings.gameEdition.save(item) },
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = editions.size),
+                        label = {
+                            Text(
+                                text = stringResource(
+                                    when (item) {
+                                        GameEdition.JAVA -> R.string.game_edition_java
+                                        GameEdition.RUST -> R.string.game_edition_rust
+                                    }
+                                ),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    )
+                }
+            }
+
+            when (edition) {
+                GameEdition.JAVA -> Text(
+                    modifier = Modifier.alpha(0.8f),
+                    text = stringResource(R.string.game_edition_java_summary),
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                GameEdition.RUST -> {
+                    Text(
+                        modifier = Modifier.alpha(0.8f),
+                        text = stringResource(
+                            R.string.game_edition_rust_summary,
+                            RustEdition.MINECRAFT_VERSION,
+                            RustEdition.ENGINE_NAME
+                        ),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    if (problem != null) {
+                        Text(
+                            text = rustEditionProblemText(problem),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    RustFolderRow()
+                }
+            }
+        }
+    }
+}
+
+/** Shortcuts to the Rust Edition's own folders, opened in the launcher's file manager */
+@Composable
+private fun RustFolderRow() {
+    val context = LocalContext.current
+    val folders = listOf(
+        R.string.rust_edition_folder_game to null,
+        R.string.rust_edition_folder_worlds to RustEdition.FOLDER_SAVES,
+        R.string.rust_edition_folder_resource_packs to RustEdition.FOLDER_RESOURCE_PACKS,
+        R.string.rust_edition_folder_shader_packs to RustEdition.FOLDER_SHADER_PACKS,
+        R.string.rust_edition_folder_data_packs to RustEdition.FOLDER_DATA_PACKS,
+        R.string.rust_edition_folder_screenshots to RustEdition.FOLDER_SCREENSHOTS
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        folders.forEach { (label, folder) ->
+            AssistChip(
+                onClick = {
+                    runCatching {
+                        val root = RustEdition.gameFolder(context).apply { mkdirs() }
+                        val current = folder?.let { RustEdition.subFolder(context, it) }
+                        FileManagerLauncher.launch(
+                            context = context,
+                            rootPath = root.absolutePath,
+                            currentPath = current?.absolutePath
+                        )
+                    }
+                },
+                label = { Text(text = stringResource(label)) }
+            )
+        }
+    }
+}
+
+/** Shown instead of starting the Rust Edition when it cannot start */
+@Composable
+fun RustEditionProblemDialog(
+    problem: RustEdition.Problem,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(text = stringResource(R.string.game_edition_rust)) },
+        text = { Text(text = rustEditionProblemText(problem)) },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.generic_confirm))
+            }
+        }
+    )
+}

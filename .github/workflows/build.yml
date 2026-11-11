@@ -2,6 +2,15 @@ name: Build APK
 
 on:
   workflow_dispatch:
+    inputs:
+      variant:
+        description: "Build variant (Release produces an UNSIGNED apk, see docs/SIGNING.md)"
+        required: true
+        default: Release
+        type: choice
+        options:
+          - Release
+          - Debug
   workflow_call:
     inputs:
       variant:
@@ -17,13 +26,85 @@ on:
       CURSEFORGE_API_KEY:
         required: false
 
+# [Rust Client]
+# The Rust Edition engine (RustEngine/) is ARM64 only and takes long to compile, so it is built
+# once by the "engine" job and cached; the "build-rust" job packages it into the arm64 and the
+# universal APK. The other architectures ("build") do not wait for it and carry no engine.
+# If the engine job fails, build-rust still builds its APKs (without the Rust Edition) so that
+# the launcher itself keeps being verified; the failed engine job keeps the run red.
 jobs:
+  engine:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    env:
+      ENGINE_ABI: arm64-v8a
+      # "quick" is what upstream builds outside of releases. "fast" (upstream's release
+      # profile) needs more memory than a 16 GB runner has without swap.
+      ENGINE_PROFILE: quick
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Restore the built engine
+        id: prebuilt
+        uses: actions/cache@v4
+        with:
+          path: RustEngine/prebuilt
+          key: rust-engine-${{ env.ENGINE_ABI }}-${{ env.ENGINE_PROFILE }}-${{ hashFiles('RustEngine/engine.lock', 'RustEngine/patches/**', 'RustEngine/tools/**') }}
+
+      - name: Set up JDK 25 (the engine compiles its data exporters with it)
+        if: steps.prebuilt.outputs.cache-hit != 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "25"
+
+      - name: Install the NDK upstream pins
+        if: steps.prebuilt.outputs.cache-hit != 'true'
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Setup Rust toolchain
+        if: steps.prebuilt.outputs.cache-hit != 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install cargo-ndk
+        if: steps.prebuilt.outputs.cache-hit != 'true'
+        run: cargo install cargo-ndk --version 3.5.4 --locked
+
+      - name: Fetch and patch the engine source
+        if: steps.prebuilt.outputs.cache-hit != 'true'
+        run: python3 RustEngine/tools/build_engine.py --fetch-only
+
+      - name: Cache the engine's Cargo build
+        if: steps.prebuilt.outputs.cache-hit != 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: RustEngine/.engine-src -> target
+          shared-key: rust-engine-${{ env.ENGINE_ABI }}-${{ env.ENGINE_PROFILE }}
+          cache-on-failure: true
+
+      - name: Build the engine
+        if: steps.prebuilt.outputs.cache-hit != 'true'
+        run: python3 RustEngine/tools/build_engine.py --abi "$ENGINE_ABI" --profile "$ENGINE_PROFILE"
+
+      - name: Upload the engine
+        uses: actions/upload-artifact@v7
+        with:
+          name: rust-engine
+          path: RustEngine/prebuilt
+          if-no-files-found: error
+
   build:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        arch: ["all", "arm", "arm64", "x86", "x86_64"]
+        arch: ["arm", "x86", "x86_64"]
       fail-fast: false
 
     env:
@@ -38,76 +119,51 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
+      - name: Build
+        uses: ./.github/actions/build-apk
         with:
-          distribution: "temurin"
-          java-version: "21"
+          arch: ${{ matrix.arch }}
+          variant: ${{ inputs.variant }}
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
+  build-rust:
+    needs: engine
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: ["all", "arm64"]
+      fail-fast: false
+
+    env:
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+      OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+      CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
         with:
-          add-job-summary: "on-failure"
+          submodules: recursive
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download the engine
+        continue-on-error: true
+        uses: actions/download-artifact@v8
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+          name: rust-engine
+          path: RustEngine/prebuilt
 
-      - name: Cache Rust build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            PetLib/rust/target
-          key: petlib-rust-${{ runner.os }}-${{ hashFiles('PetLib/rust/Cargo.lock') }}
-          restore-keys: petlib-rust-${{ runner.os }}-
-
-      - name: Install cargo-ndk
+      - name: Show the engine
         run: |
-          version="4.1.2"
-          curl -sL "https://github.com/bbqsrc/cargo-ndk/releases/download/v${version}/cargo-ndk-x86_64-unknown-linux-gnu-v${version}.tgz" |
-            tar xz -C "$HOME/.cargo/bin" --strip-components=1
-          chmod +x "$HOME/.cargo/bin"/cargo-ndk*
-          cargo ndk --version
-
-      - name: Setup Android NDK
-        run: |
-          ndk=$(ls -d "$ANDROID_HOME"/ndk/* 2>/dev/null | sort -V | tail -1)
-          if [ -z "$ndk" ] || [ ! -f "$ndk/source.properties" ]; then
-            sdkmanager --install "ndk;27.0.12077973"
-            ndk=$(ls -d "$ANDROID_HOME"/ndk/* | sort -V | tail -1)
+          if [ -f RustEngine/prebuilt/engine.json ]; then
+            cat RustEngine/prebuilt/engine.json
+            find RustEngine/prebuilt -type f -printf '%10s  %p\n'
+          else
+            echo "::warning::The Rust Edition engine was not built; this APK has no Rust Edition."
           fi
-          echo "Using NDK at $ndk"
-          test -f "$ndk/source.properties"
-          echo "ANDROID_NDK_HOME=$ndk" >> "$GITHUB_ENV"
 
-      - name: Build APK for ${{ matrix.arch }}
-        run: |
-          chmod +x gradlew
-          ./gradlew ZalithLauncher:assemble${{ inputs.variant }} -Darch=${{ matrix.arch }}
-
-      - name: Upload Release APK for ${{ matrix.arch }}
-        if: inputs.variant == 'Release'
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
+      - name: Build
+        uses: ./.github/actions/build-apk
         with:
-          name: release apk (${{ matrix.arch }})
-          path: ZalithLauncher/build/outputs/apk/release/*.apk
-
-      - name: Upload Release Mapping for ${{ matrix.arch }}
-        if: inputs.variant == 'Release'
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: mapping (${{ matrix.arch }})
-          path: ZalithLauncher/build/outputs/mapping/release/mapping.txt
-
-      - name: Upload Debug APK for ${{ matrix.arch }}
-        if: inputs.variant == 'Debug'
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          name: debug apk (${{ matrix.arch }})
-          path: ZalithLauncher/build/outputs/apk/debug/*.apk
+          arch: ${{ matrix.arch }}
+          variant: ${{ inputs.variant }}

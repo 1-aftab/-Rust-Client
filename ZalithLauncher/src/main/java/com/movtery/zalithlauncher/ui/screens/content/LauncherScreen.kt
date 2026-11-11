@@ -97,6 +97,10 @@ import com.movtery.zalithlauncher.ui.components.ScreenTypeLayout
 import com.movtery.zalithlauncher.ui.components.animated
 import com.movtery.zalithlauncher.ui.components.rememberAnimatedContext
 import com.movtery.zalithlauncher.ui.guide.GuideKeys
+import com.movtery.zalithlauncher.game.rust.GameEdition
+import com.movtery.zalithlauncher.game.rust.RustEdition
+import com.movtery.zalithlauncher.ui.screens.content.elements.RustEditionProblemDialog
+import androidx.compose.ui.platform.LocalContext
 import com.movtery.zalithlauncher.ui.screens.NestedNavKey
 import com.movtery.zalithlauncher.ui.screens.NormalNavKey
 import com.movtery.zalithlauncher.ui.screens.content.elements.CommonVersionInfoLayout
@@ -392,6 +396,58 @@ private fun VersionsContent(
 
     var showList by remember { mutableStateOf(false) }
     var versionManagerRow by remember { mutableStateOf<LayoutCoordinates?>(null) }
+
+    // Rust Client: with the Rust Edition chosen, the launch button starts the Rust engine
+    // and the Java versions are put away. Nothing of the Java launch flow runs.
+    val context = LocalContext.current
+    val isRustEdition = AllSettings.gameEdition.state == GameEdition.RUST
+    var rustProblem by remember { mutableStateOf<RustEdition.Problem?>(null) }
+    rustProblem?.let { problem ->
+        RustEditionProblemDialog(problem = problem, onDismiss = { rustProblem = null })
+    }
+    if (isRustEdition) {
+        Column(modifier = modifier) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.game_edition_rust),
+                    maxLines = 1,
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = stringResource(R.string.rust_edition_version, RustEdition.MINECRAFT_VERSION),
+                    maxLines = 1,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+            ScalingActionButton(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(PaddingValues(horizontal = 12.dp))
+                    .padding(bottom = 8.dp),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 1.dp),
+                onClick = {
+                    val problem = RustEdition.problem(context)
+                    if (problem != null) {
+                        rustProblem = problem
+                    } else {
+                        RustEdition.launch(
+                            context = context,
+                            playerName = AccountsManager.currentAccountFlow.value?.username
+                        )
+                    }
+                },
+                content = {
+                    MarqueeText(text = stringResource(R.string.main_launch_game))
+                }
+            )
+        }
+        return
+    }
+
     Column(modifier = modifier) {
         Box(
             modifier = Modifier.fillMaxWidth(),

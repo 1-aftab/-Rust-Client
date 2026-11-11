@@ -428,6 +428,11 @@ object AllSettings : SettingsRegistry() {
     val launcherAnimateSpeedLevel = intSetting("launcherAnimateSpeedLevel", 10, 1..30)
 
     /**
+     * Rust Client: the game the launch button starts, Java Edition or Rust Edition
+     */
+    val gameEdition = enumSetting("gameEdition", com.movtery.zalithlauncher.game.rust.GameEdition.JAVA)
+
+    /**
      * 主界面操作菜单的停泊侧
      */
     val launcherActionMenuSide = enumSetting("launcherActionMenuSide", ActionMenuSide.END)
@@ -626,20 +631,20 @@ object AllSettings : SettingsRegistry() {
     /**
      * 搜索模组的初始搜索平台
      */
-    val searchModPlatform = enumSetting("searchModPlatform", Platform.CURSEFORGE)
+    val searchModPlatform = enumSetting("searchModPlatform", Platform.MODRINTH)
 
     /**
      * 搜索整合包的初始搜索平台
      */
-    val searchModpackPlatform = enumSetting("searchModpackPlatform", Platform.CURSEFORGE)
+    val searchModpackPlatform = enumSetting("searchModpackPlatform", Platform.MODRINTH)
 
     /**
      * 搜索资源包的初始搜索平台
      */
-    val searchResourcePackPlatform = enumSetting("searchResourcePackPlatform", Platform.CURSEFORGE)
+    val searchResourcePackPlatform = enumSetting("searchResourcePackPlatform", Platform.MODRINTH)
 
     /**
      * 搜索光影的初始搜索平台
      */
-    val searchShadersPlatform = enumSetting("searchShadersPlatform", Platform.CURSEFORGE)
+    val searchShadersPlatform = enumSetting("searchShadersPlatform", Platform.MODRINTH)
 }

@@ -1,108 +1,50 @@
-# Zalith Launcher 2
-![Downloads](https://img.shields.io/github/downloads/ZalithLauncher/ZalithLauncher2/total)
-[![Sponsor](https://img.shields.io/badge/sponsor-30363D?logo=GitHub-Sponsors)](https://afdian.com/a/MovTery)
+# Rust Client
 
-[English](README_EN_US.md) | [繁體中文](README_ZH_TW.md)
+**Rust Client is an unofficial modified version of [Zalith Launcher 2](https://github.com/ZalithLauncher/ZalithLauncher2).**
+It is not affiliated with or endorsed by the Zalith Launcher developers. Please do not report Rust Client problems to them.
 
+Rust Client is an Android launcher that aims to offer two independent Minecraft environments in one app:
 
-> [!IMPORTANT]
-> 该项目与 [ZalithLauncher](https://github.com/ZalithLauncher/ZalithLauncher) 属于两个完全不同的项目  
+| Edition | Engine | Status |
+|---|---|---|
+| **Java Edition** | The Zalith Launcher 2 launch pipeline (JVM + LWJGL + renderer plugins), unchanged | Working (inherited from upstream) |
+| **Rust Edition** | [Starling](https://github.com/JuanLuci/starling), a native Rust client for Minecraft 26.3 (Vulkan, no JVM), hosted in its own process and played with the Zalith control layout | **Builds in CI; not yet tested on a device.** ARM64 and universal APKs only. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#6-rust-edition) |
 
-**Zalith Launcher 2** 是一个全新设计、面向 **Android 设备** 的 [Minecraft: Java Edition](https://www.minecraft.net/) 启动器。项目使用 [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher/tree/v3_openjdk/app_pojavlauncher/src/main/jni) 作为启动核心，采用 **Jetpack Compose** 与 **Material Design 3** 构建现代化 UI 体验。  
-我们目前正在搭建自己的官方网站 [zalithlauncher.cn](https://zalithlauncher.cn)  
-此外，我们已注意到有第三方使用“Zalith Launcher”名称搭建了一个看似官方的网站。请注意：**该网站并非我们创建**，其通过冒用名义并植入广告牟利。我们对此类行为**不参与、不认可、不信任**。  
-请务必提高警惕，**谨防个人隐私信息泄露**！
+Choose the edition with the *Game Edition* card on the home screen. Each edition has its own game folder.
 
+## Building
 
-## 🌐 语言与翻译支持
+Same as upstream: JDK 21, Android SDK/NDK, a Rust toolchain with the four Android targets and `cargo-ndk`
+(needed by the existing `PetLib` module).
 
-我们正在使用 Weblate 平台翻译 Zalith Launcher 2，欢迎您前往我们的 [Weblate 项目](https://hosted.weblate.org/projects/zalithlauncher2) 参与翻译！  
-感谢每一位语言贡献者的支持，让 Zalith Launcher 2 更加多语、更加全球化！
-
-
-
-
-## 📦 构建方式（开发者）
-
-> 以下内容适用于希望参与开发或自行构建应用的用户。
-
-### 环境要求
-
-* Android Studio Bumblebee 以上
-* Android SDK：
-    * **最低 API**：26
-    * **目标 API**：35
-* JDK 11
-
-### 构建步骤
-
-```bash
-git clone git@github.com:ZalithLauncher/ZalithLauncher2.git
-# 使用 Android Studio 打开项目并进行构建
+```
+./gradlew ZalithLauncher:assembleDebug -Darch=arm64
 ```
 
+The GitHub Actions workflow in `.github/workflows` builds debug APKs on every push.
 
+Things you must supply yourself before publishing (they are upstream's and are not in this repository):
 
+- **Release signing key.** `releaseBuild` still points at upstream's keystore, whose passwords are private. Debug builds use the bundled debug keystore.
+- **Microsoft OAuth client id** (`oauth_client_id`), required for Microsoft account login.
+- **CurseForge API key** (`curseforge_api_key`), required for CurseForge downloads.
 
-## 📜 License
+Branding and identity are configured in [`ZalithLauncher/gradle.properties`](ZalithLauncher/gradle.properties).
 
-本项目代码遵循 **[GPL-3.0 license](LICENSE)** 开源协议。
+## Documentation
 
-### 附加条款 (依据 GPLv3 开源协议第七条)  
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): architecture of the code base, how Java Edition is launched, how the controls work, and how the Rust Edition is integrated.
+- Upstream READMEs, kept unmodified: [简体中文](README_ZH_CN.md) · [English](README_EN_US.md) · [繁體中文](README_ZH_TW.md). They include the full table of third-party libraries and licenses.
 
-1. 当你分发该程序的修改版本时，你必须以合理方式修改该程序的名称或版本号，以示其与原始版本不同。(依据 [GPLv3, 7(c)](https://github.com/ZalithLauncher/ZalithLauncher2/blob/969827b/LICENSE#L372-L374))
-   - 修改版本 **不得在名称中包含原程序名称 “ZalithLauncher” 或其缩写 “ZL”，也不得使用与官方名称相近、可能导致混淆的名称**。
-   - 所有修改版本 **必须在程序启动页面或主界面中以明显方式标注其为“非官方修改版”**。
-   - 该程序的应用名称可在 [gradle.properties](./ZalithLauncher/gradle.properties) 中修改。
+## License and attribution
 
-2. 你不得移除该程序所显示的版权声明。(依据 [GPLv3, 7(b)](https://github.com/ZalithLauncher/ZalithLauncher2/blob/969827b/LICENSE#L368-L370))
+Rust Client is licensed under the **[GPL-3.0 license](LICENSE)**, the same as Zalith Launcher 2.
 
-## 引用开源项目
+Zalith Launcher 2 is Copyright (C) 2025-2026 MovTery and contributors. Upstream adds these terms under GPLv3 section 7, and they apply to Rust Client and to anything derived from it:
 
-本软件使用以下开源库:
+1. A modified version must not use the name "ZalithLauncher" or the abbreviation "ZL", or a confusingly similar name, and must clearly state on its startup screen or main interface that it is an unofficial modified version. Rust Client shows this notice on the home screen and in *Settings → About*; do not remove it.
+2. The copyright notices displayed by the program must not be removed.
 
-| Library                               | Copyright                                                                                                     | License              | Official Link                                                                    |
-|---------------------------------------|---------------------------------------------------------------------------------------------------------------|----------------------|----------------------------------------------------------------------------------|
-| androidx-appcompat                    | Copyright © The Android Open Source Project                                                                   | Apache 2.0           | [链接↗](https://developer.android.com/jetpack/androidx/releases/appcompat)         |
-| androidx-constraintlayout-compose     | Copyright © The Android Open Source Project                                                                   | Apache 2.0           | [链接↗](https://developer.android.com/develop/ui/compose/layouts/constraintlayout) |
-| androidx-webkit                       | Copyright © The Android Open Source Project                                                                   | Apache 2.0           | [链接↗](https://developer.android.com/jetpack/androidx/releases/webkit)            |
-| ANGLE                                 | Copyright 2018 The ANGLE Project Authors                                                                      | BSD 3-Clause License | [链接↗](http://angleproject.org/)                                                  |
-| Apache Commons Codec                  | -                                                                                                             | Apache 2.0           | [链接↗](https://commons.apache.org/proper/commons-codec)                           |
-| Apache Commons Compress               | -                                                                                                             | Apache 2.0           | [链接↗](https://commons.apache.org/proper/commons-compress)                        |
-| Apache Commons IO                     | -                                                                                                             | Apache 2.0           | [链接↗](https://commons.apache.org/proper/commons-io)                              |
-| ByteHook                              | Copyright © 2020-2024 ByteDance, Inc.                                                                         | MIT License          | [链接↗](https://github.com/bytedance/bhook)                                        |
-| BuildKeys                             | Copyright © 2026 MovTery                                                                                      | Aoache 2.0           | [链接↗](https://github.com/MovTery/BuildKeys)                                      |
-| Coil Compose                          | Copyright © 2025 Coil Contributors                                                                            | Apache 2.0           | [链接↗](https://github.com/coil-kt/coil)                                           |
-| Coil Gifs                             | Copyright © 2025 Coil Contributors                                                                            | Apache 2.0           | [链接↗](https://github.com/coil-kt/coil)                                           |
-| Coil SVG                              | Copyright © 2025 Coil Contributors                                                                            | Apache 2.0           | [链接↗](https://github.com/coil-kt/coil)                                           |
-| Fishnet                               | Copyright © 2025 Kyant                                                                                        | Apache 2.0           | [链接↗](https://github.com/Kyant0/Fishnet)                                         |
-| gl4es_extra_extra                     | Copyright © 2016-2018 Sebastien Chevalier; Copyright (c) 2013-2016 Ryan Hileman                               | MIT License          | [链接↗](https://github.com/PojavLauncherTeam/gl4es_extra_extra)                    |
-| Gson                                  | Copyright © 2008 Google Inc.                                                                                  | Apache 2.0           | [链接↗](https://github.com/google/gson)                                            |
-| kotlinx.coroutines                    | Copyright © 2000-2020 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://github.com/Kotlin/kotlinx.coroutines)                              |
-| ktor-client-content-negotiation       | Copyright © 2000-2023 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://ktor.io)                                                           |
-| ktor-client-core                      | Copyright © 2000-2023 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://ktor.io)                                                           |
-| ktor-client-okhttp                    | Copyright © 2000-2023 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://ktor.io)                                                           |
-| ktor-http                             | Copyright © 2000-2023 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://ktor.io)                                                           |
-| ktor-serialization-kotlinx-json       | Copyright © 2000-2023 JetBrains s.r.o.                                                                        | Apache 2.0           | [链接↗](https://ktor.io)                                                           |
-| LWJGL - Lightweight Java Game Library | Copyright © 2012-present Lightweight Java Game Library All rights reserved.                                   | BSD 3-Clause License | [链接↗](https://github.com/LWJGL/lwjgl3)                                           |
-| material-color-utilities              | Copyright 2021 Google LLC                                                                                     | Apache 2.0           | [链接↗](https://github.com/material-foundation/material-color-utilities)           |
-| Maven Artifact                        | Copyright © The Apache Software Foundation                                                                    | Apache 2.0           | [链接↗](https://github.com/apache/maven/tree/maven-3.9.9/maven-artifact)           |
-| Media3                                | Copyright © The Android Open Source Project                                                                   | Apache 2.0           | [链接↗](https://developer.android.com/jetpack/androidx/releases/media3)            |
-| Mesa                                  | Copyright © The Mesa Authors                                                                                  | MIT License          | [链接↗](https://mesa3d.org/)                                                       |
-| MobileGlues                           | Copyright © 2025-2026 MobileGL-Dev                                                                           | LGPL-2.1 License     | [链接↗](https://github.com/MobileGL-Dev/MobileGlues)                         |
-| MMKV                                  | Copyright © 2018 THL A29 Limited, a Tencent company.                                                          | BSD 3-Clause License | [链接↗](https://github.com/Tencent/MMKV)                                           |
-| Navigation 3                          | Copyright © The Android Open Source Project                                                                   | Apache 2.0           | [链接↗](https://developer.android.com/jetpack/androidx/releases/navigation3)       |
-| NG-GL4ES                              | Copyright © 2016-2018 Sebastien Chevalier; Copyright © 2013-2016 Ryan Hileman; Copyright (c) 2025-2026 BZLZHH | MIT License          | [链接↗](https://github.com/BZLZHH/NG-GL4ES)                                        |
-| OkHttp                                | Copyright © 2019 Square, Inc.                                                                                 | Apache 2.0           | [链接↗](https://github.com/square/okhttp)                                          |
-| Okio                                  | Copyright © 2013 Square, Inc.                                                                                 | Apache 2.0           | [链接↗](https://square.github.io/okio/)                                            |
-| OpenNBT                               | Copyright © 2013-2021 Steveice10.                                                                             | MIT License          | [链接↗](https://github.com/GeyserMC/OpenNBT)                                       |
-| Process Phoenix                       | Copyright © 2015 Jake Wharton                                                                                 | Apache 2.0           | [链接↗](https://github.com/JakeWharton/ProcessPhoenix)                             |
-| proxy-client-android                  | -                                                                                                             | LGPL-3.0 License     | [链接↗](https://github.com/TouchController/TouchController)                        |
-| Reorderable                           | Copyright © 2023 Calvin Liang                                                                                 | Apache 2.0           | [链接↗](https://github.com/Calvin-LL/Reorderable)                                  |
-| sdl2-compat                           | Copyright (C) 2026 Sam Lantinga <slouken@libsdl.org>                                                          | Zlib License         | [链接↗](https://github.com/libsdl-org/sdl2-compat)                                 |
-| SDL3                                  | Copyright (C) 1997-2026 Sam Lantinga <slouken@libsdl.org>                                                     | Zlib License         | [链接↗](https://github.com/libsdl-org/SDL)                                         |
-| SimpleFPEWrapper                      | Copyright © 2026 MobileGL-Dev                                                                                | LGPL-3.0 License     | [链接↗](https://github.com/MobileGL-Dev/SimpleFPEWrapper)                    |
-| sora-editor                           | Copyright (C) 2020-2026  Rosemoe                                                                              | LGPL-2.1 License     | [链接↗](https://github.com/Rosemoe/sora-editor)                                    |
-| StringFog                             | Copyright © 2016-2023, Megatron King                                                                          | Apache 2.0           | [链接↗](https://github.com/MegatronKing/StringFog)                                 |
-| tm4e (TextMate for Eclipse)           | Copyright © Eclipse Foundation                                                                                | EPL-2.0 License      | [链接↗](https://github.com/eclipse-tm4e/tm4e)                                      |
-| XZ for Java                           | Copyright © The XZ for Java authors and contributors                                                          | 0BSD License         | [链接↗](https://tukaani.org/xz/java.html)                                          |
+The Rust Edition engine is Starling, MIT licensed, Copyright (c) 2026 Ludovic Marie and the Horizon contributors; see [RustEngine/NOTICE.md](RustEngine/NOTICE.md).
+
+Source file headers, the in-app acknowledgements and the third-party library list are preserved from upstream.

@@ -63,7 +63,6 @@ import com.movtery.zalithlauncher.game.account.AccountsManager
 import com.movtery.zalithlauncher.game.account.auth_server.data.AuthServer
 import com.movtery.zalithlauncher.game.account.isAuthServerAccount
 import com.movtery.zalithlauncher.game.account.isMicrosoftAccount
-import com.movtery.zalithlauncher.game.account.isMicrosoftLogging
 import com.movtery.zalithlauncher.game.account.wardrobe.toArmModel
 import com.movtery.zalithlauncher.game.account.yggdrasil.PlayerProfile
 import com.movtery.zalithlauncher.ui.AndroidStringText
@@ -189,9 +188,8 @@ fun AccountManageScreen(
     LaunchedEffect(Unit) {
         when (key.loginMenu) {
             FirstLoginMenu.NONE -> {}
-            FirstLoginMenu.MICROSOFT -> {
-                actions.onIntent(AccountManageIntent.UpdateMicrosoftLoginOp(MicrosoftLoginOperation.Tip))
-            }
+            //[Rust Client] Microsoft login has been removed, fall back to the normal menu
+            FirstLoginMenu.MICROSOFT,
             FirstLoginMenu.NORMAL -> {
                 actions.onIntent(AccountManageIntent.UpdateLoginMenuOp(LoginMenuOperation.Login))
             }
@@ -342,15 +340,6 @@ private fun LoginMenuOperation(
                     )
                 },
                 authServers = authServers,
-                onMicrosoftLogin = {
-                    if (!isMicrosoftLogging()) {
-                        actions.onIntent(
-                            AccountManageIntent.UpdateMicrosoftLoginOp(
-                                MicrosoftLoginOperation.Tip
-                            )
-                        )
-                    }
-                },
                 onLocalLogin = {
                     actions.onIntent(AccountManageIntent.UpdateLocalLoginOp(LocalLoginOperation.Edit))
                 },
