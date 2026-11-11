@@ -1,0 +1,4 @@
+# The fetched upstream source and what is built from it (tools/build_engine.py)
+/.engine-src/
+/prebuilt/
+/build/

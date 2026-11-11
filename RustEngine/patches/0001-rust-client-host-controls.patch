@@ -1,0 +1,294 @@
+diff --git a/crates/horizon-client/src/android.rs b/crates/horizon-client/src/android.rs
+index 546c37d..6e69b7d 100644
+--- a/crates/horizon-client/src/android.rs
++++ b/crates/horizon-client/src/android.rs
+@@ -836,9 +836,65 @@ mod input {
+     pub fn keyboard_used() -> bool {
+         KEYBOARD_USED.swap(false, Ordering::Relaxed)
+     }
++
++    // Rust Client: the host launcher draws its own on-screen controls in a window over the
++    // game's and plays the game through them (RustInputAdapter.kt). What they do comes here
++    // from the UI thread and goes on as a mouse's and a keyboard's events (game/input_mode.rs).
++
++    /// The host's controls are in use: the game keeps to the keyboard and mouse while a world
++    /// is played, so its own touch controls stay away.
++    static EXTERNAL_CONTROLS: AtomicBool = AtomicBool::new(false);
++    /// The keys the host's controls pressed and released since the game last asked.
++    static EXTERNAL_KEYS: Mutex<Vec<ExternalKey>> = Mutex::new(Vec::new());
++
++    /// A key of the host's controls: an Android key code (`KeyEvent.KEYCODE_*`), and the
++    /// character it types if any (with key code 0, a character an input method typed).
++    pub struct ExternalKey {
++        pub keycode: u32,
++        pub pressed: bool,
++        pub character: Option<char>,
++    }
++
++    pub fn set_external_controls(on: bool) {
++        EXTERNAL_CONTROLS.store(on, Ordering::Relaxed);
++    }
++
++    pub fn external_controls() -> bool {
++        EXTERNAL_CONTROLS.load(Ordering::Relaxed)
++    }
++
++    /// Whether the game reads the mouse yet: before, the host's events would be lost.
++    pub fn external_ready() -> bool {
++        MOUSE.lock().unwrap_or_else(|e| e.into_inner()).taken
++    }
++
++    /// A mouse event of the host's controls, for the game's next loop iteration.
++    pub fn push_external_mouse(event: MouseEvent) {
++        let mut mouse = MOUSE.lock().unwrap_or_else(|e| e.into_inner());
++        if mouse.taken && mouse.events.len() < MOUSE_QUEUE {
++            mouse.events.push(event);
++        }
++    }
++
++    /// A key of the host's controls, for the game's next loop iteration.
++    pub fn push_external_key(key: ExternalKey) {
++        let mut keys = EXTERNAL_KEYS.lock().unwrap_or_else(|e| e.into_inner());
++        if keys.len() < MOUSE_QUEUE {
++            keys.push(key);
++        }
++    }
++
++    /// The host's keys since the last call.
++    pub fn take_external_keys() -> Vec<ExternalKey> {
++        std::mem::take(&mut *EXTERNAL_KEYS.lock().unwrap_or_else(|e| e.into_inner()))
++    }
+ }
+ 
+ pub use input::{MouseEvent, keyboard_used, pad_state, take_mouse_events};
++pub use input::{
++    ExternalKey, external_controls, external_ready, push_external_key, push_external_mouse,
++    set_external_controls, take_external_keys,
++};
+ 
+ /// Android took the captured pointer back while the game held it (StarlingActivity).
+ static POINTER_LOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+@@ -1232,6 +1288,9 @@ pub fn main(app: AndroidApp) {
+     // The app's own files: resources, caches, the import inbox, test arguments.
+     let private: PathBuf = app
+         .internal_data_path()
++        // Rust Client: the engine keeps its own files apart from the host launcher's
++        // (EngineFiles.java makes the same choice for the activity's side).
++        .map(|files| files.join("rust-engine"))
+         .unwrap_or_else(|| PathBuf::from("/data/local/tmp/horizon"));
+     let _ = std::fs::create_dir_all(&private);
+     let mut notes = Vec::new();
+diff --git a/crates/horizon-client/src/android_lib.rs b/crates/horizon-client/src/android_lib.rs
+index de10b15..a4420a4 100644
+--- a/crates/horizon-client/src/android_lib.rs
++++ b/crates/horizon-client/src/android_lib.rs
+@@ -98,6 +98,93 @@ extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_onPointerCa
+     horizon_client::android::note_pointer_capture_lost();
+ }
+ 
++/// Rust Client: `StarlingActivity.nativeExternalControls`. The host launcher's on-screen controls
++/// are shown (or put away): the game leaves its own touch controls out while a world is played.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_nativeExternalControls(
++    _env: *mut std::ffi::c_void,
++    _class: *mut std::ffi::c_void,
++    on: u8,
++) {
++    horizon_client::android::set_external_controls(on != 0);
++}
++
++/// Rust Client: `StarlingActivity.nativeExternalReady`. Whether the game reads the host's events
++/// yet (it does from its first loop iteration; the start-up screens before it do not).
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_nativeExternalReady(
++    _env: *mut std::ffi::c_void,
++    _class: *mut std::ffi::c_void,
++) -> u8 {
++    u8::from(horizon_client::android::external_ready())
++}
++
++/// Rust Client: `StarlingActivity.nativeExternalMouse`. `kind` 0 moves the pointer to (`x`, `y`)
++/// in window pixels, 1 moves the captured mouse by (`x`, `y`) pixels (the view turns), 2 turns
++/// the wheel by (`x`, `y`) lines.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_nativeExternalMouse(
++    _env: *mut std::ffi::c_void,
++    _class: *mut std::ffi::c_void,
++    kind: i32,
++    x: f32,
++    y: f32,
++) {
++    use horizon_client::android::MouseEvent;
++    let event = match kind {
++        0 => MouseEvent::Moved(f64::from(x), f64::from(y)),
++        1 => MouseEvent::Motion(f64::from(x), f64::from(y)),
++        2 => MouseEvent::Wheel(x, y),
++        _ => return,
++    };
++    horizon_client::android::push_external_mouse(event);
++}
++
++/// Rust Client: `StarlingActivity.nativeExternalButton`. `button` 0 is the left mouse button,
++/// 1 the right, 2 the middle (GLFW's numbers).
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_nativeExternalButton(
++    _env: *mut std::ffi::c_void,
++    _class: *mut std::ffi::c_void,
++    button: i32,
++    pressed: u8,
++) {
++    let button = match button {
++        0 => winit::event::MouseButton::Left,
++        1 => winit::event::MouseButton::Right,
++        2 => winit::event::MouseButton::Middle,
++        _ => return,
++    };
++    horizon_client::android::push_external_mouse(horizon_client::android::MouseEvent::Button(
++        button,
++        pressed != 0,
++    ));
++}
++
++/// Rust Client: `StarlingActivity.nativeExternalKey`. `keycode` is Android's
++/// (`KeyEvent.KEYCODE_*`); `character` is the Unicode code point the key types, or 0.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_nativeExternalKey(
++    _env: *mut std::ffi::c_void,
++    _class: *mut std::ffi::c_void,
++    keycode: i32,
++    pressed: u8,
++    character: i32,
++) {
++    let Ok(keycode) = u32::try_from(keycode) else {
++        return;
++    };
++    let character = u32::try_from(character)
++        .ok()
++        .filter(|c| *c != 0)
++        .and_then(char::from_u32);
++    horizon_client::android::push_external_key(horizon_client::android::ExternalKey {
++        keycode,
++        pressed: pressed != 0,
++        character,
++    });
++}
++
+ /// The system diagnostics window calls this on its worker, without starting the game.
+ #[unsafe(no_mangle)]
+ extern "system" fn Java_io_github_juanluci_starling_DiagnosticsActivity_makeReport(
+diff --git a/crates/horizon-client/src/game/input_mode.rs b/crates/horizon-client/src/game/input_mode.rs
+index 018916e..648a617 100644
+--- a/crates/horizon-client/src/game/input_mode.rs
++++ b/crates/horizon-client/src/game/input_mode.rs
+@@ -50,6 +50,23 @@ impl Game<'_> {
+         if crate::android::keyboard_used() {
+             self.input_used(InputMode::KeyboardMouse);
+         }
++        // Rust Client: the host launcher's on-screen controls play the world (android.rs). The
++        // game's screens stay the finger's; once a world is played again the game goes back to
++        // the keyboard and mouse and holds the pointer, which tells the host to take over
++        // (StarlingActivity.capturePointer).
++        if crate::android::external_controls() {
++            if self.input_mode == InputMode::Touch
++                && !self.captured
++                && self.title.is_none()
++                && self.screen == super::Screen::Playing
++            {
++                self.input_used(InputMode::KeyboardMouse);
++                if self.input_mode == InputMode::KeyboardMouse {
++                    self.capture(true);
++                }
++            }
++            self.external_key_frame(event_loop);
++        }
+         let events = crate::android::take_mouse_events();
+         if events.is_empty() {
+             return;
+@@ -87,4 +104,29 @@ impl Game<'_> {
+             self.handle_window_event(event_loop, id, event, InputOrigin::User);
+         }
+     }
++
++    /// Rust Client: the keys the host launcher's on-screen controls pressed and released since
++    /// the last iteration, as the window events a keyboard's keys make.
++    #[cfg(target_os = "android")]
++    fn external_key_frame(&mut self, event_loop: &dyn EventLoopCtl) {
++        let keys = crate::android::take_external_keys();
++        if keys.is_empty() {
++            return;
++        }
++        let Some(id) = self.window.as_ref().map(|w| w.id()) else {
++            return;
++        };
++        for key in keys {
++            let event = WindowEvent::KeyboardInput {
++                device_id: DeviceId::dummy(),
++                event: winit::platform::android::external_key_event(
++                    key.keycode,
++                    key.pressed,
++                    key.character,
++                ),
++                is_synthetic: false,
++            };
++            self.handle_window_event(event_loop, id, event, InputOrigin::User);
++        }
++    }
+ }
+diff --git a/third_party/winit/src/platform/android.rs b/third_party/winit/src/platform/android.rs
+index 3ee8a3b..ddb6444 100644
+--- a/third_party/winit/src/platform/android.rs
++++ b/third_party/winit/src/platform/android.rs
+@@ -146,6 +146,18 @@ pub fn set_input_hook(hook: InputHook) {
+     crate::platform_impl::set_input_hook(hook);
+ }
+ 
++/// Rust Client's patch: a key event for the Android key code `keycode` (`KeyEvent.KEYCODE_*`),
++/// as the backend makes one of a key of the input queue. `character` is what the key types, if
++/// anything: with key code 0 it is a character an input method typed.
++#[cfg(android_platform)]
++pub fn external_key_event(
++    keycode: u32,
++    pressed: bool,
++    character: Option<char>,
++) -> crate::event::KeyEvent {
++    crate::platform_impl::external_key_event(keycode, pressed, character)
++}
++
+ impl<T> EventLoopBuilderExtAndroid for EventLoopBuilder<T> {
+     fn with_android_app(&mut self, app: AndroidApp) -> &mut Self {
+         self.platform_specific.android_app = Some(app);
+diff --git a/third_party/winit/src/platform_impl/android/mod.rs b/third_party/winit/src/platform_impl/android/mod.rs
+index 7813fb4..b7c920c 100644
+--- a/third_party/winit/src/platform_impl/android/mod.rs
++++ b/third_party/winit/src/platform_impl/android/mod.rs
+@@ -43,6 +43,30 @@ pub(crate) fn set_input_hook(hook: crate::platform::android::InputHook) {
+     let _ = INPUT_HOOK.set(hook);
+ }
+ 
++/// Rust Client's patch: the key event this backend makes of an Android key code, for a key that
++/// did not come through the activity's input queue (the host launcher's on-screen controls).
++pub(crate) fn external_key_event(
++    keycode: u32,
++    pressed: bool,
++    character: Option<char>,
++) -> event::KeyEvent {
++    let keycode = Keycode::from(keycode);
++    let state =
++        if pressed { event::ElementState::Pressed } else { event::ElementState::Released };
++    let key_char = character.map(android_activity::input::KeyMapChar::Unicode);
++    let logical_key = keycodes::to_logical(key_char, keycode);
++    let text = if pressed { logical_key.to_text().map(smol_str::SmolStr::new) } else { None };
++    event::KeyEvent {
++        state,
++        physical_key: keycodes::to_physical_key(keycode),
++        logical_key,
++        location: keycodes::to_location(keycode),
++        repeat: false,
++        text,
++        platform_specific: KeyEventExtra {},
++    }
++}
++
+ /// Returns the minimum `Option<Duration>`, taking into account that `None`
+ /// equates to an infinite timeout, not a zero timeout (so can't just use
+ /// `Option::min`)

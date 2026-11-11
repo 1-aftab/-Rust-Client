@@ -1,0 +1,5 @@
+# The upstream source the Rust Edition engine is built from.
+# tools/build_engine.py clones exactly this commit and applies patches/*.patch on top of it.
+repository = https://github.com/JuanLuci/starling
+tag = v0.8.0
+commit = ac874422ed8f892505ff73d67ae486ecfee7a516

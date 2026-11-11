@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rust Client: the Android side of the Rust Edition engine (Starling 0.8.0, MIT), adapted from
+     upstream's packaging/android/AndroidManifest.xml.
+
+     Left out on purpose, because the host launcher is the app here:
+       * the launcher icon alias, the shortcuts and the "open with / share to" intent filters;
+       * MANAGE_EXTERNAL_STORAGE and REQUEST_INSTALL_PACKAGES (the game folder is the app's own
+         external files, and the engine's self-update is switched off: StarlingActivity);
+       * GameActivity itself: the host declares its own subclass, with the NativeActivity
+         meta-data, and names it in the string resource rust_engine_game_activity. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- WorkService: the game stays in the foreground while the game files download and are
+         prepared, which many phones would otherwise cut off the internet. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- The engine draws with Vulkan 1.3 (wgpu). Not required by the app: the Java Edition does
+         not need it, and the launcher tells the player when the device has none. -->
+    <uses-feature android:name="android.hardware.vulkan.version" android:version="0x400003" android:required="false" />
+
+    <application>
+        <!-- Restarts the game in a new process when it asks (StarlingActivity.restart). -->
+        <activity
+            android:name="io.github.juanluci.starling.LauncherActivity"
+            android:exported="false"
+            android:process=":rustlauncher"
+            android:taskAffinity="${applicationId}.rustlauncher"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <!-- Logs and a report when the engine cannot start. -->
+        <activity
+            android:name="io.github.juanluci.starling.DiagnosticsActivity"
+            android:exported="false"
+            android:process=":rustdiagnostics"
+            android:theme="@style/Starling.Game"
+            android:hardwareAccelerated="false" />
+        <service
+            android:name="io.github.juanluci.starling.WorkService"
+            android:exported="false"
+            android:process=":rust"
+            android:foregroundServiceType="dataSync" />
+        <provider
+            android:name="io.github.juanluci.starling.UpdateProvider"
+            android:authorities="${applicationId}.updates"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+        <!-- The Rust Edition's game folder in Android's Files app (GameFolderProvider), which
+             only the system may bind. In a process of its own: the game ends its process with
+             its activity, which would cut a copy short. -->
+        <provider
+            android:name="io.github.juanluci.starling.GameFolderProvider"
+            android:authorities="${applicationId}.documents"
+            android:exported="true"
+            android:process=":rustdocuments"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+    </application>
+</manifest>

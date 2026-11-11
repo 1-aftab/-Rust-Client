@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 and up: the starting window, which StarlingActivity keeps until the game's
+         first frame, on the game's dark background.
+         Rust Client: the animated icon item of upstream is left out, so that the host
+         launcher's own icon is used. -->
+    <style name="Starling.Game" parent="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+        <item name="android:windowSplashScreenBackground">#FF16161C</item>
+    </style>
+</resources>

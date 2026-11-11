@@ -371,6 +371,7 @@ dependencies {
     implementation(project(":InputMap"))
     implementation(project(":Guide"))
     implementation(project(":PetLib"))
+    implementation(project(":RustEngine"))
     //Utils
     implementation(libs.bytehook)
     implementation(libs.gson)
