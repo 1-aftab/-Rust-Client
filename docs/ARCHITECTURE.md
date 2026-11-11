@@ -90,57 +90,94 @@ sink (`lwjglEvent`, `CallbackBridge`) is tied to the JVM.
 | `<dataDir>/databases/` | Room databases: accounts, game paths |
 | `<externalFilesDir>/control_layouts/`, `logs/` | Control layouts, logs |
 
-## 6. Rust Edition: current state
+## 6. Rust Edition
 
-**The Rust Minecraft engine is not in this repository.** The only Rust code is `PetLib/rust`
-(about 4,900 lines: a skinned player-model renderer for the home screen). There is no Minecraft
-client, no world/chunk/network/render engine, no submodule and no prebuilt engine library.
+The Rust Edition is [Starling](https://github.com/JuanLuci/starling) (MIT), a Rust rewrite of
+Minecraft Java Edition 26.3 that runs natively on Android: no JVM while playing, wgpu on Vulkan.
+It is packaged by the `:RustEngine` module. See [`RustEngine/NOTICE.md`](../RustEngine/NOTICE.md).
 
-Until the engine source is added, no Rust Edition code can be written honestly: the JNI surface,
-the surface hand-off, the input events, the asset format and the on-disk layout are all defined by
-the engine. Nothing in the app claims Rust Edition support yet.
+### What "integrated" means here, precisely
 
-### What is needed
+Starling is not a library that draws into a surface handed to it. Its `libhorizon_android.so` is a
+complete Android `NativeActivity` application that owns its window, its event loop, its menus and
+its account screens. Rust Client therefore hosts it rather than embeds it:
 
-1. The engine source as a Cargo workspace (a Git URL to add as a submodule, or the files themselves).
-   An APK or prebuilt `.so` is not a substitute: without source the entry points and input ABI are unknown.
-2. Its license, and the licenses of its dependencies, to confirm it can be combined with GPL-3.0 code.
-3. Answers to the questions below, or source clear enough to answer them:
-   - Graphics backend (wgpu / Vulkan / GLES) and how it expects a window: `ANativeWindow*` from a
-     `Surface`, or does it assume `winit` + `NativeActivity`/`GameActivity`?
-   - Entry point: a library with init/resize/frame/shutdown functions, or a `main` with its own event loop?
-   - Input model: raw key/mouse events, or abstract actions (move vector, jump, attack)?
-   - Where it gets game assets for 26.3 (reads a vanilla client jar? own format?) and how it authenticates.
-   - Whether it supports resource packs, mods/plugins, shaders. These tabs will only be built for
-     features the engine really has.
+| Part | Who provides it |
+|---|---|
+| Edition selector, launch button, folder shortcuts | Rust Client (Compose) |
+| Game window, rendering, title screen, menus, inventory, settings | Starling, unchanged |
+| On-screen controls **while a world is played** | Rust Client: the Zalith control layout |
+| Touch in menus and the inventory | Starling's own touch handling |
+| Player name | the launcher's current account name, handed over at start |
 
-### Planned integration (subject to the answers above)
+### Pieces
 
-- **Build**: new Gradle module `RustEngine`, mirroring `PetLib`: `cargo ndk` builds a `cdylib`
-  into the module's `jniLibs`. arm64-v8a first.
-- **Process**: run in the existing `:game` process model. A new `RustGameActivity` (or a third
-  `HandlerType` in `VMActivity`, if the engine fits `AbstractHandler`) so a native crash cannot take
-  down the launcher, and so the JVM-specific setup in `Launcher` is never touched.
-- **JNI surface** (`RustEngineBridge.kt` ↔ `jni.rs`): `create(config)`, `surfaceCreated(Surface)`,
-  `surfaceChanged(w, h)`, `surfaceDestroyed()`, `pause()`, `resume()`, `destroy()`, plus input calls.
-  Rendering runs on an engine-owned thread; surface loss on backgrounding must drop the swapchain
-  and recreate it on resume.
-- **Controls**: reuse `LayerController` (`ControlBoxLayout`, the editor, the JSON format) unchanged.
-  Add a `RustInputAdapter` as a second sink beside `lwjglEvent`: it receives the same
-  `ClickEvent`s, joystick directions, cursor deltas and gamepad events and translates them to the
-  engine's input calls. Java Edition's path is not modified.
-- **Storage**: a separate root `<filesDir>/rust/` with `engine/`, `worlds/`, `resourcepacks/`,
-  `config/` (and `mods/`, `shaders/` only if supported). Accounts and launcher settings stay shared.
-  Java Edition paths do not move, so existing installs keep working.
-- **UI**: an edition selector on the home screen, backed by a persisted `GameEdition` setting.
-  It is added together with the engine, not before, so the app never shows an edition that cannot start.
+- `RustEngine/engine.lock` pins the upstream commit; `tools/build_engine.py` fetches it, applies
+  `patches/`, builds `libhorizon_android.so` and the engine's asset kits into `prebuilt/`
+  (git-ignored). The source is not vendored.
+- `RustEngine/src/main/java/io/github/juanluci/starling/` is Starling's Java glue, adapted
+  (`Rust Client:` comments). The package cannot be renamed: the native code calls it by name.
+  `EngineHost` is the launcher's entry point (`isAvailable`, folders, game intent).
+- `game/rust/RustGameActivity` subclasses the engine's activity and runs in the `:rust` process.
+  The Java Edition's `:game` process, JVM, LWJGL and renderer plugins are never loaded with it.
+- `game/rust/RustEdition` checks that the engine is in the APK and that the device has
+  Vulkan 1.3, and starts the game.
+- `setting/AllSettings.gameEdition` persists the choice; `GameEditionCard` (home screen) changes
+  it; `LauncherScreen.VersionsContent` starts the chosen edition.
 
-### Known limitations and risks
+### Controls
 
-- If the engine is built around `winit`'s `android-activity`, it expects to own the activity.
-  Embedding it under a Compose overlay (needed for Zalith-style controls) then requires either
-  engine changes or hosting it in a `GameActivity` subclass with the overlay added on top.
-- Vulkan-only engines will not run on devices without a usable Vulkan driver; a GLES fallback is the engine's job.
-- Java mods, shader packs and Java-format resource packs cannot be assumed to work.
-- A second engine adds APK size per ABI; shared files (accounts, settings) are not duplicated.
-- 32-bit ABIs may not be supportable by the engine; Rust Edition may be arm64-only while Java Edition keeps all four.
+A `NativeActivity` owns its window's surface, so no view can be drawn over the game in the same
+window. `RustControlsOverlay` is a separate, never-focused window above it that renders the
+LayerController layout chosen in *Settings → Controls* (the same file the Java Edition uses).
+
+```
+LayerController widget ─ ClickEvent ─▶ RustInputAdapter ─▶ StarlingActivity.nativeExternal*
+                                         (GLFW name → Android key code, RustKeyMap)
+                                                         ─▶ engine patch: queued, replayed as
+                                                            keyboard / mouse window events
+```
+
+The engine calls `capturePointer(true)` when a world takes the mouse and `capturePointer(false)`
+for every menu; the overlay is shown and hidden on exactly that signal. Outside the widgets a drag
+turns the view, a tap is a right click, a long press holds the left button.
+
+Not mapped: the layout events "switch IME", "open Zalith game menu" and "send text"; gamepad and
+gyroscope settings of the launcher; per-version control layouts (the global one is used).
+
+### Storage
+
+| Path | Owner |
+|---|---|
+| `<externalFilesDir>/.minecraft/` (or custom game paths) | Java Edition |
+| `<externalFilesDir>/rust/` — `saves`, `resourcepacks`, `shaderpacks`, `datapacks`, options | Rust Edition game folder |
+| `<filesDir>/rust-engine/` — prepared resources, caches, sign-ins | Rust Edition engine |
+| control layouts | shared on purpose |
+
+No storage permission is requested for the Rust Edition.
+
+### CI
+
+`.github/workflows/build.yml`: job `engine` builds the arm64 engine once (cached on
+`engine.lock`, the patches and the build tool); `build-rust` packages it into the arm64 and
+universal APKs; `build` produces arm, x86 and x86_64 APKs without it. Those report "not included"
+in the selector.
+
+### Verified and not verified
+
+Verified by GitHub Actions: the patched engine compiles for arm64, the Java glue and the Kotlin
+host compile, and all five APKs assemble.
+
+**Not verified: anything at run time.** No build has been started on a device. In particular:
+the engine starting inside the host package, the overlay window appearing and receiving touches,
+key delivery, and `libc++_shared.so` (the APK carries the NDK 25 copy from the Java Edition's
+build, the engine was built with NDK 28).
+
+### Known limitations
+
+- ARM64 only, Vulkan 1.3 only, Minecraft 26.3 only.
+- No Java mods; Starling has its own mod formats.
+- Starling's built-in account screens exist beside the launcher's accounts; only the name is passed.
+- The engine downloads Minecraft's assets from Mojang at first start and needs network for that.
+- CI builds the engine with upstream's `quick` profile (no LTO), which is slower at run time than
+  upstream's release builds.

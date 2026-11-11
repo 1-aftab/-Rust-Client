@@ -8,9 +8,9 @@ Rust Client is an Android launcher that aims to offer two independent Minecraft 
 | Edition | Engine | Status |
 |---|---|---|
 | **Java Edition** | The Zalith Launcher 2 launch pipeline (JVM + LWJGL + renderer plugins), unchanged | Working (inherited from upstream) |
-| **Rust Edition** | A separate Rust-based client, loaded as a native library | **Not implemented.** The engine source is not in this repository yet; see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| **Rust Edition** | [Starling](https://github.com/JuanLuci/starling), a native Rust client for Minecraft 26.3 (Vulkan, no JVM), hosted in its own process and played with the Zalith control layout | **Builds in CI; not yet tested on a device.** ARM64 and universal APKs only. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#6-rust-edition) |
 
-Nothing in the app is presented as a Rust Edition feature until the engine is actually integrated.
+Choose the edition with the *Game Edition* card on the home screen. Each edition has its own game folder.
 
 ## Building
 
@@ -33,7 +33,7 @@ Branding and identity are configured in [`ZalithLauncher/gradle.properties`](Zal
 
 ## Documentation
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): architecture of the code base, how Java Edition is launched, how the controls work, and the Rust Edition integration plan.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): architecture of the code base, how Java Edition is launched, how the controls work, and how the Rust Edition is integrated.
 - Upstream READMEs, kept unmodified: [简体中文](README_ZH_CN.md) · [English](README_EN_US.md) · [繁體中文](README_ZH_TW.md). They include the full table of third-party libraries and licenses.
 
 ## License and attribution
@@ -44,5 +44,7 @@ Zalith Launcher 2 is Copyright (C) 2025-2026 MovTery and contributors. Upstream 
 
 1. A modified version must not use the name "ZalithLauncher" or the abbreviation "ZL", or a confusingly similar name, and must clearly state on its startup screen or main interface that it is an unofficial modified version. Rust Client shows this notice on the home screen and in *Settings → About*; do not remove it.
 2. The copyright notices displayed by the program must not be removed.
+
+The Rust Edition engine is Starling, MIT licensed, Copyright (c) 2026 Ludovic Marie and the Horizon contributors; see [RustEngine/NOTICE.md](RustEngine/NOTICE.md).
 
 Source file headers, the in-app acknowledgements and the third-party library list are preserved from upstream.
