@@ -6,10 +6,10 @@
 
     <!-- The engine's dark palette (crates/horizon-theme/src/lib.rs, DARK), which upstream's
          build_apk.py generates at build time for the diagnostics window. Starling 0.8.0. -->
-    <color name="starling_page">#1c110e</color>
-    <color name="starling_rule">#58423b</color>
-    <color name="starling_ink">#f4ded8</color>
-    <color name="starling_ink_soft">#dfc0b7</color>
-    <color name="starling_accent">#ffb59f</color>
-    <color name="starling_on_accent">#5f1600</color>
+    <color name="starling_page">#121016</color>
+    <color name="starling_rule">#474250</color>
+    <color name="starling_ink">#eae4f0</color>
+    <color name="starling_ink_soft">#cbc3d6</color>
+    <color name="starling_accent">#d3bbff</color>
+    <color name="starling_on_accent">#3a1f73</color>
 </resources>

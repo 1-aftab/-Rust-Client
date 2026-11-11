@@ -228,3 +228,12 @@ build, the engine was built with NDK 28).
 - The engine downloads Minecraft's assets from Mojang at first start and needs network for that.
 - CI builds the engine with upstream's `quick` profile (no LTO), which is slower at run time than
   upstream's release builds.
+
+## Look
+
+The launcher has one look in two modes, white and dark (`ui/theme/RustClientColors.kt`); the
+colour themes, the dynamic and the custom colour are no longer offered, only the dark mode
+setting. Type is Nunito (`res/font`, SIL OFL 1.1, `docs/NUNITO_LICENSE.txt`) and corners are
+rounder (`ui/theme/Type.kt`: `AppTypography`, `AppShapes`). The engine's own screens use the dark
+palette (patch 0007, `RustEngine/src/main/res/values/rust_engine.xml`). The same patch puts the
+built-in shader pack in `shaderpacks/` as `RustClientVisuals.zip`.

@@ -1,0 +1,48 @@
+diff --git a/crates/horizon-client/src/preparer.rs b/crates/horizon-client/src/preparer.rs
+index ec59c09..ff4603f 100644
+--- a/crates/horizon-client/src/preparer.rs
++++ b/crates/horizon-client/src/preparer.rs
+@@ -283,3 +283,5 @@ pub fn put_shader_pack(game_folder: &Path) {
+     let stamp = format!("{}-{:08x}", bytes.len(), crc32(&bytes));
+-    let marker = crate::logging::private_home().join(".starling-visuals");
++    // Rust Client: the pack goes by the launcher's name; the one put there under the old name
++    // goes away with the first start of this version.
++    let marker = crate::logging::private_home().join(".rust-client-visuals");
+     if std::fs::read_to_string(&marker).ok().as_deref() == Some(&stamp) {
+@@ -288,4 +290,5 @@ pub fn put_shader_pack(game_folder: &Path) {
+     let dir = game_folder.join("shaderpacks");
++    let _ = std::fs::remove_file(dir.join("StarlingVisuals.zip"));
+     match std::fs::create_dir_all(&dir)
+-        .and_then(|()| std::fs::write(dir.join("StarlingVisuals.zip"), &bytes))
++        .and_then(|()| std::fs::write(dir.join("RustClientVisuals.zip"), &bytes))
+         .and_then(|()| std::fs::write(&marker, &stamp))
+diff --git a/crates/horizon-theme/src/lib.rs b/crates/horizon-theme/src/lib.rs
+index a45ff57..1c9a333 100644
+--- a/crates/horizon-theme/src/lib.rs
++++ b/crates/horizon-theme/src/lib.rs
+@@ -402,14 +402,14 @@ pub const LIGHT: Palette = Palette {
+ pub const DARK: Palette = Palette {
+-    page: 0x1c110e,
+-    plate_soft: 0x241916,
+-    plate: 0x342723,
+-    surface: 0x291d19,
+-    rule: 0x58423b,
+-    ink: 0xf4ded8,
+-    ink_soft: 0xdfc0b7,
+-    muted: 0xa78b83,
+-    accent: 0xffb59f,
+-    on_accent: 0x5f1600,
++    page: 0x121016,
++    plate_soft: 0x1a181f,
++    plate: 0x29262f,
++    surface: 0x1f1c24,
++    rule: 0x474250,
++    ink: 0xeae4f0,
++    ink_soft: 0xcbc3d6,
++    muted: 0x958e9f,
++    accent: 0xd3bbff,
++    on_accent: 0x3a1f73,
+     danger: 0xffb4ab,
+-    success: 0x8ed88e,
++    success: 0x9fd6d0,
+     dark: true,
