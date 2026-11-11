@@ -118,36 +118,20 @@ fun Modifier.animated(
     distance: Dp = 40.dp,
     fade: Boolean = true
 ): Modifier = this.graphicsLayer {
-    val progress = ctx.progress.value
+    // Rust Client: the launcher's own entrance. Whatever side an item belongs to, it grows
+    // into place from a little smaller and a little lower while it fades in, and settles
+    // without a bounce.
     val direction = if (from == AnimatedDirection.Auto) ctx.defaultDirection else from
+    val hidden = ctx.distanceScale.value * (1f - ctx.progress.value)
+    translationX = 0f
     if (direction != AnimatedDirection.None) {
-        //退场位移距离小于进场：进场滑入全程，退场仅向进入方向溜出一段短距离
-        //位移比例随动画平滑过渡，打断反转时从当前值回退，不会因比例硬切换而跳变
-        val hiddenOffset = distance.toPx() * ctx.distanceScale.value * (1f - progress)
-        when (direction) {
-            AnimatedDirection.Top -> {
-                translationX = 0f
-                translationY = -hiddenOffset
-            }
-            AnimatedDirection.Bottom -> {
-                translationX = 0f
-                translationY = hiddenOffset
-            }
-            AnimatedDirection.Left -> {
-                translationX = -hiddenOffset
-                translationY = 0f
-            }
-            AnimatedDirection.Right -> {
-                translationX = hiddenOffset
-                translationY = 0f
-            }
-            else -> {
-                translationX = 0f
-                translationY = 0f
-            }
-        }
+        val scale = 1f - 0.1f * hidden
+        scaleX = scale
+        scaleY = scale
+        translationY = distance.toPx() * 0.4f * hidden
     } else {
-        translationX = 0f
+        scaleX = 1f
+        scaleY = 1f
         translationY = 0f
     }
     alpha = if (fade) ctx.alphaProgress.value else 1f
@@ -164,7 +148,7 @@ private fun swapAnimateProgressAsState(
         tween(
             durationMillis = SwapTimeline.swapTime(SwapTimeline.ENTER_ITEM),
             delayMillis = SwapTimeline.enterStagger(index) + SwapTimeline.swapTime(extraDelayMillis),
-            easing = EnterTranslateEasing
+            easing = EaseOutFluent(3)
         )
     } else {
         tween(

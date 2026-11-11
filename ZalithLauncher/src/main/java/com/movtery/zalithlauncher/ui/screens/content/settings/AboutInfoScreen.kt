@@ -137,13 +137,7 @@ fun AboutInfoScreen(
                             icon = painterResource(R.drawable.img_avatar_bangbang93),
                             title = "bangbang93",
                             text = stringResource(R.string.about_acknowledgements_bangbang93_text, BuildKeys.LAUNCHER_SHORT_NAME),
-                            button = {
-                                Button(
-                                    onClick = { openLink("https://ifdian.net/a/bangbang93") }
-                                ) {
-                                    Text(text = stringResource(R.string.about_sponsor))
-                                }
-                            }
+                            button = {}
                         )
                         LinkIconItem(
                             icon = painterResource(R.drawable.img_launcher_fcl),
@@ -169,13 +163,7 @@ fun AboutInfoScreen(
                             icon = painterResource(R.drawable.img_avatar_mcim),
                             title = "mcmod-info-mirror",
                             text = stringResource(R.string.about_acknowledgements_mcim_text, BuildKeys.LAUNCHER_SHORT_NAME),
-                            button = {
-                                Button(
-                                    onClick = { openLink("https://www.mcimirror.top/sponsor") }
-                                ) {
-                                    Text(text = stringResource(R.string.about_sponsor))
-                                }
-                            }
+                            button = {}
                         )
                         LinkIconItem(
                             icon = painterResource(R.drawable.img_platform_modrinth),

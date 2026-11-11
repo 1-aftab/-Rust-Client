@@ -40,13 +40,13 @@ object SwapTimeline {
 
 
     /** 新页单项位移时长 */
-    const val ENTER_ITEM = 350
+    const val ENTER_ITEM = 420
     /** 新页单项淡入时长 */
-    const val ENTER_ALPHA = 200
+    const val ENTER_ALPHA = 260
     /** 新页进场相邻项错峰间隔 */
-    const val ENTER_STAGGER = 25
+    const val ENTER_STAGGER = 45
     /** 新页进场错峰封顶 */
-    const val ENTER_STAGGER_CAP = 250
+    const val ENTER_STAGGER_CAP = 315
 
 
 

@@ -238,9 +238,12 @@ rounder (`ui/theme/Type.kt`: `AppTypography`, `AppShapes`). The engine's own scr
 palette (patch 0007, `RustEngine/src/main/res/values/rust_engine.xml`). The same patch puts the
 built-in shader pack in `shaderpacks/` as `RustClientVisuals.zip`.
 
-The launcher's own arrangement: the bar is a dock under the screens (`MainScreen.kt`: navigation
-in its middle, the screen's title at its end), and the launch card starts on the left
-(`launcherActionMenuSide`).
+The launcher's own arrangement: no title bar; a floating rail at the left side carries the
+navigation (`MainScreen.kt`), and the launch card starts beside it (`launcherActionMenuSide`).
+Items enter by growing into place while they fade in (`ui/components/_Animated.kt`).
+
+Engine patch 0008: the engine's own touch controls are not offered in its Controls page (the
+launcher's are the only ones), and the offer to import another app's worlds is off.
 
 In the Rust Edition's process the settings are read on every start and resume
 (`RustGameActivity`: `loadAllSettings`), and the layout editor opens as
