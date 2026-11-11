@@ -511,7 +511,7 @@ fun PlatformListLayout(
             }
         },
         getItemLabel = { item ->
-            item.displayName
+            item.selectorLabel
         },
         selectedLabel = { item ->
             PlatformIdentifier(
@@ -530,7 +530,7 @@ fun PlatformListLayout(
                     contentDescription = platform.displayName
                 )
                 Text(
-                    text = platform.displayName,
+                    text = platform.selectorLabel,
                     style = MaterialTheme.typography.labelMedium
                 )
             }
