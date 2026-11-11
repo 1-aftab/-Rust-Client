@@ -38,6 +38,7 @@ class RustGameActivity : GameActivity() {
     private val adapter = RustInputAdapter()
     private val state = RustOverlayState()
     private var overlay: RustControlsOverlay? = null
+    private var catalog: RustCatalogDialog? = null
     private val handler = Handler(Looper.getMainLooper())
     private var resumed = false
 
@@ -66,6 +67,19 @@ class RustGameActivity : GameActivity() {
                 state.captured = capture
             }
         }
+    }
+
+    /**
+     * Called by the engine, from its own thread, where it would show its catalog of mods,
+     * resource packs and shader packs: the launcher's own screen is shown instead.
+     */
+    override fun openCatalog(shelf: Int): Boolean {
+        runOnUiThread {
+            if (isFinishing || isDestroyed || catalog?.isShowing == true) return@runOnUiThread
+            adapter.releaseAll()
+            catalog = RustCatalogDialog(this, shelf).also { runCatching { it.show() } }
+        }
+        return true
     }
 
     private fun showControls(show: Boolean) {
@@ -114,6 +128,8 @@ class RustGameActivity : GameActivity() {
         handler.removeCallbacks(watch)
         overlay?.let { runCatching { it.dismiss() } }
         overlay = null
+        catalog?.let { runCatching { it.dismiss() } }
+        catalog = null
         super.onDestroy()
     }
 

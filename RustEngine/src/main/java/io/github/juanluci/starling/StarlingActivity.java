@@ -154,6 +154,15 @@ public class StarlingActivity extends NativeActivity {
     /** Rust Client: the host's keyboard button: shows the on-screen keyboard. */
     public static native void nativeExternalKeyboard();
 
+    /**
+     * Rust Client: the game asks for the mod catalog (EngineCatalog's shelf numbers), from its
+     * own thread. A host that shows the catalog as a screen of its own does so and answers true;
+     * false keeps the game's.
+     */
+    public boolean openCatalog(int shelf) {
+        return false;
+    }
+
     /** The game holds the pointer (capturePointer); on the UI thread only. */
     private boolean pointerWanted;
 

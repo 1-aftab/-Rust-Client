@@ -175,6 +175,18 @@ over the title) take the pointer's left button as a finger; the on-screen keyboa
 without the engine's touch mode; the engine's update offer is off; the engine's own screens use
 the launcher's dark colour scheme (`horizon-theme` `DARK`).
 
+How the game's screens are touched is one setting (`AllSettings.rustTouchScreen`, on by default),
+switched by the round button at the top right of those screens and in the game menu: on, fingers
+go to the game as touches where they are and no pointer shows; off, the screen is a touchpad for
+the mouse pointer.
+
+The mod catalog (patch 0006) is the launcher's screen, not the engine's: where the game would
+open its catalog it calls `StarlingActivity.openCatalog(shelf)`, and `RustGameActivity` shows
+`RustCatalogDialog` (Compose, laid out as the launcher's download results). The dialog searches,
+installs and removes through `EngineCatalog` (JNI into `android.rs` `host_catalog`, which runs
+the engine's own `starling-catalog`), and the game refreshes its pages from the recorded changes
+in `poll_catalog`.
+
 `tools/build_engine.py` finally renames the engine in every text it shows (translations and the
 string literals of its Rust sources), so the player only ever reads the launcher's name.
 

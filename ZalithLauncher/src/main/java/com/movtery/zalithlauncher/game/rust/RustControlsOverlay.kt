@@ -37,6 +37,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -196,7 +203,8 @@ private fun Overlay(
     onQuit: () -> Unit
 ) {
     val captured = state.captured
-    val mode = AllSettings.mouseControlMode.state
+    // touched where the finger is, with no pointer; or a touchpad that moves the pointer
+    val mode = if (AllSettings.rustTouchScreen.state) MouseControlMode.CLICK else MouseControlMode.SLIDE
     val locale = LocalConfiguration.current.locales[0]
 
     // the layout chosen in the launcher's settings, the same the Java Edition uses; the first
@@ -307,8 +315,7 @@ private fun Overlay(
         }
 
         // the launcher's mouse pointer, the one the Java Edition shows
-        val showCursor = !captured && cursor.isSpecified &&
-                (mode == MouseControlMode.SLIDE || !AllSettings.hideMouse.state)
+        val showCursor = !captured && cursor.isSpecified && mode == MouseControlMode.SLIDE
         if (showCursor) {
             val mouseSize = AllSettings.mouseSize.state.dp
             MousePointer(
@@ -320,6 +327,18 @@ private fun Overlay(
                 cursorShape = CursorShape.Arrow,
                 mouseSize = mouseSize,
                 mouseFile = getMouseFile(CursorShape.Arrow).ifExists()
+            )
+        }
+
+        // on the game's screens: switches between touching the screen and the mouse pointer
+        if (!captured) {
+            TouchModeButton(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 8.dp, end = 8.dp),
+                touchScreen = mode == MouseControlMode.CLICK,
+                alpha = (AllSettings.menuBallOpacity.state / 100f).coerceIn(0.35f, 1f),
+                onSwitch = { AllSettings.rustTouchScreen.save(mode != MouseControlMode.CLICK) }
             )
         }
 
@@ -352,6 +371,39 @@ private fun Overlay(
             alpha = AllSettings.menuBallOpacity.state / 100f,
             onClick = { menu = menu.next() }
         )
+    }
+}
+
+/**
+ * Switches how the game's screens are used: the finger on the screen itself (shown as a hand:
+ * a tap is a tap where the finger is, a swipe scrolls), or the screen as a touchpad for the
+ * mouse pointer (shown as a mouse).
+ */
+@Composable
+private fun TouchModeButton(
+    modifier: Modifier,
+    touchScreen: Boolean,
+    alpha: Float,
+    onSwitch: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .size(40.dp)
+            .alpha(alpha),
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        onClick = onSwitch
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                modifier = Modifier.size(22.dp),
+                painter = painterResource(
+                    if (touchScreen) R.drawable.ic_touch_app_filled else R.drawable.ic_mouse_filled
+                ),
+                contentDescription = stringResource(R.string.rust_edition_touch_screen)
+            )
+        }
     }
 }
 
@@ -434,22 +486,11 @@ private fun GameMenu(
                 )
             }
             item {
-                MenuListLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = stringResource(R.string.settings_control_mouse_control_mode_title),
-                    items = MouseControlMode.entries,
-                    currentItem = AllSettings.mouseControlMode.state,
-                    onItemChange = { AllSettings.mouseControlMode.save(it) },
-                    getItemText = { stringResource(it.nameRes) }
-                )
-            }
-            item {
                 MenuSwitchButton(
                     modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.settings_control_mouse_hide_title),
-                    switch = AllSettings.hideMouse.state,
-                    onSwitch = { AllSettings.hideMouse.save(it) },
-                    enabled = AllSettings.mouseControlMode.state == MouseControlMode.CLICK
+                    text = stringResource(R.string.rust_edition_touch_screen),
+                    switch = AllSettings.rustTouchScreen.state,
+                    onSwitch = { AllSettings.rustTouchScreen.save(it) }
                 )
             }
             item {
@@ -458,7 +499,7 @@ private fun GameMenu(
                     text = stringResource(R.string.settings_control_mouse_enable_click_title),
                     switch = AllSettings.enableMouseClick.state,
                     onSwitch = { AllSettings.enableMouseClick.save(it) },
-                    enabled = AllSettings.mouseControlMode.state == MouseControlMode.SLIDE
+                    enabled = !AllSettings.rustTouchScreen.state
                 )
             }
             item {

@@ -104,11 +104,17 @@ def rebrand():
         path.write_text(json.dumps(texts, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     changed = 0
-    for path in sorted((SOURCE / "crates").rglob("*.rs")):
+    # The catalog is the desktop launcher's mod browser, compiled into the game from there.
+    sources = sorted((SOURCE / "crates").rglob("*.rs")) + sorted(
+        (SOURCE / "launcher/src").rglob("browser*/**/*.rs")
+    ) + sorted((SOURCE / "launcher/src").glob("browser*.rs"))
+    for path in sources:
         source = path.read_text(encoding="utf-8")
         if not brand.search(source):
             continue
         swept = sweep_rust(source, named)
+        # Not a text: what the mod registry's own entries say their author is.
+        swept = swept.replace('== ["Rust Client"]', '== ["Horizon"]')
         if swept != source:
             path.write_text(swept, encoding="utf-8")
             changed += 1

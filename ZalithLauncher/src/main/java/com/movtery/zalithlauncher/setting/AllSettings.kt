@@ -197,6 +197,12 @@ object AllSettings : SettingsRegistry() {
     val hideMouse = boolSetting("hideMouse", false)
 
     /**
+     * Rust Edition: the game's screens are touched where the finger is, with no mouse pointer;
+     * off, the screen is a touchpad that moves the pointer
+     */
+    val rustTouchScreen = boolSetting("rustTouchScreen", true)
+
+    /**
      * 虚拟鼠标大小（Dp）
      */
     val mouseSize = intSetting("mouseSize", 24, 5..50)
