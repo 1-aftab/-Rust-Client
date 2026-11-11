@@ -2,6 +2,15 @@ name: Build APK
 
 on:
   workflow_dispatch:
+    inputs:
+      variant:
+        description: "Build variant (Release produces an UNSIGNED apk, see docs/SIGNING.md)"
+        required: true
+        default: Release
+        type: choice
+        options:
+          - Release
+          - Debug
   workflow_call:
     inputs:
       variant:

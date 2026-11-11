@@ -44,6 +44,15 @@ fun getKeyFromLocal(envKey: String, fileName: String? = null, default: String? =
     }
 }
 
+/**
+ * [Rust Client] The keystore used to sign release builds, if one was supplied.
+ * Without it the release APK is left unsigned so that it can be signed manually.
+ */
+val releaseStoreFile: File? = System.getenv("RELEASE_STORE_FILE")
+    ?.takeIf { it.isNotBlank() }
+    ?.let { File(it) }
+    ?.takeIf { it.isFile }
+
 fun File.sha1Hex(): String {
     val digest = MessageDigest.getInstance("SHA-1")
     inputStream().use { stream ->
@@ -116,11 +125,17 @@ android {
     }
 
     signingConfigs {
-        create("releaseBuild") {
-            storeFile = file("zalith_launcher.jks")
-            storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
-            keyAlias = "movtery_zalith"
-            keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
+        // [Rust Client] Release builds are signed by hand (see docs/SIGNING.md).
+        // A release signing config only exists when a keystore is supplied through
+        // RELEASE_STORE_FILE / STORE_PASSWORD / RELEASE_KEY_ALIAS / KEY_PASSWORD;
+        // otherwise Gradle produces an unsigned release APK.
+        if (releaseStoreFile != null) {
+            create("releaseBuild") {
+                storeFile = releaseStoreFile
+                storePassword = getKeyFromLocal("STORE_PASSWORD", ".store_password.txt")
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "rust_client"
+                keyPassword = getKeyFromLocal("KEY_PASSWORD", ".key_password.txt")
+            }
         }
         create("debugBuild") {
             storeFile = file("zalith_launcher_debug.jks")
@@ -143,7 +158,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("releaseBuild")
+            signingConfig = signingConfigs.findByName("releaseBuild")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -278,7 +293,11 @@ androidComponents {
 
                 (output.getFilter(ABI)?.identifier ?: "all").let { abi ->
                     val baseName = "$launcherName-${if (variant.buildType == "release") launcherVersionName else "Debug-$launcherVersionName"}"
-                    output.outputFileName = if (abi == "all") "$baseName.apk" else "$baseName-$abi.apk"
+                    // [Rust Client] make it obvious that a release APK still has to be signed
+                    val unsigned = variant.buildType == "release" && releaseStoreFile == null
+                    val fullName = (if (abi == "all") baseName else "$baseName-$abi") +
+                        (if (unsigned) "-unsigned" else "")
+                    output.outputFileName = "$fullName.apk"
                 }
             }
         }
