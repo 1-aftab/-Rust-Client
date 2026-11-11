@@ -71,6 +71,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.constraintlayout.compose.Dimension
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation3.runtime.entryProvider
 import com.movtery.zalithlauncher.BuildKeys
@@ -174,10 +175,40 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                NavStateHost(rootKey = screenBackStackModel.mainScreen) {
+                    NavigationUI(
+                        modifier = Modifier.fillMaxSize(),
+                        screenBackStackModel = screenBackStackModel,
+                        toMainScreen = toMainScreen,
+                        eventViewModel = eventViewModel,
+                        modpackImportViewModel = modpackImportViewModel,
+                        modifyVersionViewModel = modifyVersionViewModel,
+                        submitError = submitError
+                    )
+                }
+
+                TaskMenu(
+                    isExpanded = isTaskMenuExpanded,
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .fillMaxWidth(0.3f)
+                        .align(Alignment.CenterStart)
+                        .padding(all = 6.dp)
+                ) {
+                    changeTasksExpandedState()
+                }
+            }
+
+            // Rust Client: the bar is a dock under the screens, not a title bar over them
             TopBar(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(40.dp),
+                    .height(46.dp),
                 mainScreenKey = mainScreenKey,
                 inLauncherScreen = inLauncherScreen,
                 taskRunning = taskRunning,
@@ -213,35 +244,6 @@ fun MainScreen(
                     changeTasksExpandedState()
                 },
             )
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) {
-                NavStateHost(rootKey = screenBackStackModel.mainScreen) {
-                    NavigationUI(
-                        modifier = Modifier.fillMaxSize(),
-                        screenBackStackModel = screenBackStackModel,
-                        toMainScreen = toMainScreen,
-                        eventViewModel = eventViewModel,
-                        modpackImportViewModel = modpackImportViewModel,
-                        modifyVersionViewModel = modifyVersionViewModel,
-                        submitError = submitError
-                    )
-                }
-
-                TaskMenu(
-                    isExpanded = isTaskMenuExpanded,
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .fillMaxWidth(0.3f)
-                        .align(Alignment.CenterStart)
-                        .padding(all = 6.dp)
-                ) {
-                    changeTasksExpandedState()
-                }
-            }
         }
     }
 }
@@ -332,7 +334,14 @@ private fun <E: TitledNavKey> TopBar(
             Crossfade(
                 modifier = Modifier.constrainAs(title) {
                     centerVerticallyTo(parent)
-                    start.linkTo(backCenter.end, margin = 16.dp)
+                    linkTo(
+                        start = endButtons.end,
+                        end = parent.end,
+                        startMargin = 8.dp,
+                        endMargin = 16.dp,
+                        bias = 1f
+                    )
+                    width = Dimension.preferredWrapContent
                 },
                 targetState = parentRes to childRes
             ) { (parent, child) ->
@@ -376,7 +385,7 @@ private fun <E: TitledNavKey> TopBar(
                     .constrainAs(endButtons) {
                         top.linkTo(parent.top)
                         bottom.linkTo(parent.bottom)
-                        end.linkTo(parent.end, margin = 12.dp)
+                        centerHorizontallyTo(parent)
                     },
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -384,10 +393,10 @@ private fun <E: TitledNavKey> TopBar(
                 AnimatedVisibility(
                     visible = !(isTasksExpanded || taskRunning),
                     enter = slideInVertically(
-                        initialOffsetY = { -50 }
+                        initialOffsetY = { 50 }
                     ) + fadeIn(),
                     exit = slideOutVertically(
-                        targetOffsetY = { -50 }
+                        targetOffsetY = { 50 }
                     ) + fadeOut()
                 ) {
                     Row(

@@ -237,3 +237,11 @@ setting. Type is Nunito (`res/font`, SIL OFL 1.1, `docs/NUNITO_LICENSE.txt`) and
 rounder (`ui/theme/Type.kt`: `AppTypography`, `AppShapes`). The engine's own screens use the dark
 palette (patch 0007, `RustEngine/src/main/res/values/rust_engine.xml`). The same patch puts the
 built-in shader pack in `shaderpacks/` as `RustClientVisuals.zip`.
+
+The launcher's own arrangement: the bar is a dock under the screens (`MainScreen.kt`: navigation
+in its middle, the screen's title at its end), and the launch card starts on the left
+(`launcherActionMenuSide`).
+
+In the Rust Edition's process the settings are read on every start and resume
+(`RustGameActivity`: `loadAllSettings`), and the layout editor opens as
+`RustControlEditorActivity`: the launcher's editor, translucent, in the game's process and task.

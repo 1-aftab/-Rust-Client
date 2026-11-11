@@ -46,7 +46,13 @@ import java.io.File
 private const val BUNDLE_CONTROL = "BUNDLE_CONTROL"
 
 @AndroidEntryPoint
-class ControlEditorActivity : BaseAppCompatActivity() {
+open class ControlEditorActivity : BaseAppCompatActivity() {
+    /**
+     * Rust Client: the editor is shown over a running game (a translucent activity), which
+     * stays visible behind the controls being edited, instead of the launcher's background
+     */
+    protected open val overGame: Boolean = false
+
     override fun isIgnoreNotch(): Boolean = AllSettings.gameFullScreen.getValue()
 
     override fun getTaskDescriptionTitle(): String = getString(R.string.control_manage_info_edit)
@@ -92,17 +98,19 @@ class ControlEditorActivity : BaseAppCompatActivity() {
             ) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = backgroundColor(),
+                    color = if (overGame) androidx.compose.ui.graphics.Color.Transparent else backgroundColor(),
                     contentColor = onBackgroundColor()
                 ) {
                     BoxWithConstraints(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        Background(
-                            modifier = Modifier.fillMaxSize(),
-                            viewModel = backgroundViewModel,
-                            allowVideo = false
-                        )
+                        if (!overGame) {
+                            Background(
+                                modifier = Modifier.fillMaxSize(),
+                                viewModel = backgroundViewModel,
+                                allowVideo = false
+                            )
+                        }
 
                         ControlEditor(
                             viewModel = editorViewModel,
@@ -131,8 +139,12 @@ class ControlEditorActivity : BaseAppCompatActivity() {
 /**
  * 开启控制布局编辑器
  */
-fun startEditorActivity(context: Context, file: File) {
-    val intent = Intent(context, ControlEditorActivity::class.java).apply {
+fun startEditorActivity(
+    context: Context,
+    file: File,
+    activity: Class<out ControlEditorActivity> = ControlEditorActivity::class.java
+) {
+    val intent = Intent(context, activity).apply {
         putExtra(BUNDLE_CONTROL, file.absolutePath)
     }
     context.startActivity(intent)

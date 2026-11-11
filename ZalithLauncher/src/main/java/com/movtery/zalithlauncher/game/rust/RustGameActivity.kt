@@ -23,6 +23,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import androidx.compose.ui.unit.IntSize
+import com.movtery.zalithlauncher.setting.loadAllSettings
 import com.movtery.zalithlauncher.ui.activities.startEditorActivity
 import io.github.juanluci.starling.GameActivity
 
@@ -52,6 +53,7 @@ class RustGameActivity : GameActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        runCatching { loadAllSettings(this, true) }
         adapter.setEnabled(true)
     }
 
@@ -93,7 +95,9 @@ class RustGameActivity : GameActivity() {
                     val view = window.decorView
                     IntSize(view.width, view.height)
                 },
-                onEditLayout = { file -> startEditorActivity(this, file) },
+                onEditLayout = { file ->
+                    startEditorActivity(this, file, RustControlEditorActivity::class.java)
+                },
                 onQuit = { finish() }
             ).also { overlay = it }
             if (!current.isShowing) {
@@ -110,6 +114,9 @@ class RustGameActivity : GameActivity() {
     override fun onResume() {
         super.onResume()
         resumed = true
+        // this process has its own copy of the settings: what the launcher (or the editor)
+        // saved is read here, or the controls would start from the defaults every time
+        runCatching { loadAllSettings(this, true) }
         // back from the layout editor: the layout on disk may have changed
         state.reload++
         handler.removeCallbacks(watch)
@@ -121,6 +128,8 @@ class RustGameActivity : GameActivity() {
         handler.removeCallbacks(watch)
         // nothing stays pressed behind the player's back
         adapter.releaseAll()
+        // and the controls are not shown under what covers the game (the layout editor)
+        showControls(false)
         super.onPause()
     }
 
