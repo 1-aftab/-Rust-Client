@@ -39,6 +39,7 @@ import com.movtery.zalithlauncher.BuildKeys
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.launcherName
 import com.movtery.zalithlauncher.ui.components.BackgroundCard
+import com.movtery.zalithlauncher.ui.screens.content.elements.GameEditionCard
 import com.movtery.zalithlauncher.ui.screens.content.home.server.ServerCardContent
 import com.movtery.zalithlauncher.ui.screens.content.home.version.VersionCardContent
 
@@ -99,6 +100,7 @@ object HomeCards {
     /** 系统卡片（不可变更） */
     fun systemCards(): List<SystemCard> = buildList {
         add(unofficialNoticeCard())
+        add(gameEditionCard())
         if (BuildConfig.DEBUG) {
             add(debugWarningCard())
         }
@@ -128,6 +130,13 @@ object HomeCards {
                 )
             }
         }
+    }
+
+    /**
+     * Rust Client: the Java Edition / Rust Edition selector.
+     */
+    private fun gameEditionCard() = SystemCard(id = "system_game_edition") {
+        GameEditionCard()
     }
 
     /**

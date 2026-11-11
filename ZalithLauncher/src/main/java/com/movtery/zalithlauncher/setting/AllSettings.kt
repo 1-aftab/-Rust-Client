@@ -428,6 +428,11 @@ object AllSettings : SettingsRegistry() {
     val launcherAnimateSpeedLevel = intSetting("launcherAnimateSpeedLevel", 10, 1..30)
 
     /**
+     * Rust Client: the game the launch button starts, Java Edition or Rust Edition
+     */
+    val gameEdition = enumSetting("gameEdition", com.movtery.zalithlauncher.game.rust.GameEdition.JAVA)
+
+    /**
      * 主界面操作菜单的停泊侧
      */
     val launcherActionMenuSide = enumSetting("launcherActionMenuSide", ActionMenuSide.END)
