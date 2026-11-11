@@ -160,9 +160,17 @@ jobs:
 
       - name: Install the Android tools upstream pins
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
-            "ndk;28.2.13676358" "build-tools;35.0.0" "platforms;android-36" > /dev/null
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --install "ndk;28.2.13676358" > /dev/null
+          test -d "$ANDROID_HOME/ndk/28.2.13676358" || { echo "::error::The NDK did not install"; exit 1; }
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          # The engine's build script wants these two to exist even when it only makes the
+          # library, which uses neither: a placeholder does where the runner can't install them.
+          for package in "build-tools;35.0.0" "platforms;android-36"; do
+            yes | "$sdkmanager" --install "$package" > /dev/null || echo "::warning::$package did not install"
+          done
+          mkdir -p "$ANDROID_HOME/build-tools/35.0.0" "$ANDROID_HOME/platforms/android-36"
+          test -e "$ANDROID_HOME/platforms/android-36/android.jar" || : > "$ANDROID_HOME/platforms/android-36/android.jar"
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
