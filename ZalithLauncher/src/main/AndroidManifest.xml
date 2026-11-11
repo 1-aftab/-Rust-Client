@@ -122,6 +122,24 @@
             android:process=":game"
             android:launchMode="standard"
             android:screenOrientation="sensorLandscape" />
+        <!-- Rust Client: the Rust Edition. The engine is a NativeActivity (Vulkan, no JVM game)
+             and runs in a process of its own, apart from the Java Edition's ":game". -->
+        <activity
+            android:name=".game.rust.RustGameActivity"
+            android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|density|screenSize|smallestScreenSize|layoutDirection|colorMode|fontWeightAdjustment|grammaticalGender"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:process=":rust"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Starling.Game"
+            android:windowSoftInputMode="adjustNothing">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="horizon_android" />
+            <meta-data
+                android:name="android.app.func_name"
+                android:value="starling_on_create" />
+        </activity>
         <activity android:name=".ui.activities.ErrorActivity"
             android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation"
             android:screenOrientation="sensorLandscape" />
