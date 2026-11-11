@@ -62,6 +62,7 @@ import com.movtery.zalithlauncher.launcherName
 import com.movtery.zalithlauncher.library.LibraryInfo
 import com.movtery.zalithlauncher.library.libraryData
 import com.movtery.zalithlauncher.path.URL_COMMUNITY
+import com.movtery.zalithlauncher.viewmodel.isLauncherUpgradeCheckAvailable
 import com.movtery.zalithlauncher.path.URL_MCMOD
 import com.movtery.zalithlauncher.path.URL_PROJECT
 import com.movtery.zalithlauncher.path.URL_SUPPORT
@@ -111,15 +112,32 @@ fun AboutInfoScreen(
                             title = BuildKeys.LAUNCHER_NAME,
                             text = stringResource(R.string.about_launcher_version, BuildConfig.VERSION_NAME),
                             button = {
-                                Button(
-                                    onClick = checkUpdate
-                                ) {
-                                    Text(text = stringResource(R.string.upgrade_title))
+                                //Rust Client: only offered when this build has its own update feed
+                                if (isLauncherUpgradeCheckAvailable) {
+                                    Button(
+                                        onClick = checkUpdate
+                                    ) {
+                                        Text(text = stringResource(R.string.upgrade_title))
+                                    }
                                 }
+                                Button(
+                                    onClick = { openLink(BuildKeys.URL_HOME) }
+                                ) {
+                                    Text(text = stringResource(R.string.about_launcher_project_link))
+                                }
+                            }
+                        )
+
+                        //Rust Client: upstream attribution, required by the upstream additional terms (GPLv3 §7)
+                        ButtonIconItem(
+                            icon = painterResource(R.drawable.ic_copyright_outlined),
+                            title = stringResource(R.string.rust_client_unofficial_title),
+                            text = stringResource(R.string.rust_client_unofficial_text, BuildKeys.LAUNCHER_NAME, launcherName),
+                            button = {
                                 Button(
                                     onClick = { openLink(URL_PROJECT) }
                                 ) {
-                                    Text(text = stringResource(R.string.about_launcher_project_link))
+                                    Text(text = stringResource(R.string.rust_client_upstream_link))
                                 }
                             }
                         )

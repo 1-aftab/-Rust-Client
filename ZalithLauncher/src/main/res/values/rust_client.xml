@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ~ Rust Client
+  ~ An unofficial modified version of Zalith Launcher 2.
+  ~ Zalith Launcher 2 is Copyright (C) 2025-2026 MovTery <movtery228@qq.com> and contributors.
+  ~
+  ~ This program is free software: you can redistribute it and/or modify
+  ~ it under the terms of the GNU General Public License as published by
+  ~ the Free Software Foundation, either version 3 of the License, or
+  ~ (at your option) any later version.
+  ~
+  ~ This program is distributed in the hope that it will be useful,
+  ~ but WITHOUT ANY WARRANTY; without even the implied warranty of
+  ~ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  ~ See the GNU General Public License for more details.
+  ~
+  ~ You should have received a copy of the GNU General Public License
+  ~ along with this program.  If not, see <https://www.gnu.org/licenses/gpl-3.0.txt>.
+  -->
+<!-- Strings added by Rust Client. Kept out of strings.xml so upstream merges stay clean. -->
+<resources>
+    <!-- Title of the permanent notice on the home screen and in About -->
+    <string name="rust_client_unofficial_title">Unofficial Modified Version</string>
+    <!-- Body of the notice; %1$s is this app's name, %2$s is the upstream launcher's name -->
+    <string name="rust_client_unofficial_text">%1$s is an unofficial modified version of %2$s 2. It is not affiliated with or endorsed by the %2$s developers, so please do not report %1$s problems to them. Licensed under GPL-3.0.</string>
+    <!-- Button in About that opens the upstream project page -->
+    <string name="rust_client_upstream_link">Original Project</string>
+</resources>

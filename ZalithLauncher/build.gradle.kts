@@ -20,6 +20,8 @@ val launcherAPPName = project.findProperty("launcher_app_name") as? String ?: er
 val launcherName = project.findProperty("launcher_name") as? String ?: error("The \"launcher_name\" property is not set in gradle.properties.")
 val launcherShortName = project.findProperty("launcher_short_name") as? String ?: error("The \"launcher_short_name\" property is not set in gradle.properties.")
 val launcherUrl = project.findProperty("url_home") as? String ?: error("The \"url_home\" property is not set in gradle.properties.")
+val launcherApplicationId = project.findProperty("launcher_application_id") as? String ?: error("The \"launcher_application_id\" property is not set in gradle.properties.")
+val launcherUpgradeInfoUrl = (project.findProperty("upgrade_info_url") as? String).orEmpty().trim()
 
 val launcherVersionCode = (project.findProperty("launcher_version_code") as? String)?.toIntOrNull() ?: error("The \"launcher_version_code\" property is not set as an integer in gradle.properties.")
 val launcherVersionName = project.findProperty("launcher_version_name") as? String ?: error("The \"launcher_version_name\" property is not set in gradle.properties.")
@@ -129,8 +131,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = zalithPackageName
-        applicationIdSuffix = ".v2"
+        applicationId = launcherApplicationId
         minSdk = 26
         targetSdk = 34
         versionCode = launcherVersionCode
@@ -300,6 +301,7 @@ buildKeys {
     string("LAUNCHER_IDENTIFIER", launcherName, true)
     string("LAUNCHER_SHORT_NAME", launcherShortName, true)
     string("URL_HOME", launcherUrl, true)
+    string("UPGRADE_INFO_URL", launcherUpgradeInfoUrl, true)
     string("CURSEFORGE_API", getKeyFromLocal("CURSEFORGE_API_KEY", ".curseforge_api.txt", defaultCurseForgeApiKey), true)
     string("BUILD_ARCH", projectArch)
 }

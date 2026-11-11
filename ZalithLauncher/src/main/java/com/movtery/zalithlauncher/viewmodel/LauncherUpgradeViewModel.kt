@@ -39,10 +39,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.movtery.zalithlauncher.BuildConfig
+import com.movtery.zalithlauncher.BuildKeys
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.path.GLOBAL_CLIENT
 import com.movtery.zalithlauncher.path.GLOBAL_JSON
-import com.movtery.zalithlauncher.path.URL_PROJECT_INFO
 import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.ui.components.MarqueeText
 import com.movtery.zalithlauncher.ui.components.SimpleListDialog
@@ -62,7 +62,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "LauncherUpgradeVM"
@@ -80,9 +79,17 @@ sealed interface LauncherUpgradeOperation {
 /**
  * 最新版本的信息获取源
  */
-private const val LATEST_VERSION = "latest_version_md.json"
-private const val LATEST_API_URL = "$URL_PROJECT_INFO/$LATEST_VERSION"
-private const val LATEST_API_CHINESE_URL = "https://repo.miawa.cn/zalith-info/v2/$LATEST_VERSION"
+/**
+ * Rust Client: the update feed is configured at build time (`upgrade_info_url` in gradle.properties).
+ * Upstream's feed is deliberately not used: it describes upstream APKs, which are signed with a
+ * different key and have a different application id, so they can never update this app.
+ */
+private val LATEST_API_URL: String get() = BuildKeys.UPGRADE_INFO_URL
+
+/**
+ * Whether this build has an update feed. When false, no update request is ever sent.
+ */
+val isLauncherUpgradeCheckAvailable: Boolean get() = LATEST_API_URL.isNotBlank()
 
 /**
  * 用于记录启动器更新 ViewModel
@@ -123,6 +130,7 @@ class LauncherUpgradeViewModel: ViewModel() {
     fun checkOnAppStart(
         onIsLatest: suspend () -> Unit = {}
     ) {
+        if (!isLauncherUpgradeCheckAvailable) return
         viewModelScope.launch {
             if (
                 isWithinRateLimit(
@@ -159,6 +167,7 @@ class LauncherUpgradeViewModel: ViewModel() {
         onInProgress: suspend () -> Unit = {},
         onIsLatest: suspend () -> Unit = {}
     ): Boolean {
+        if (!isLauncherUpgradeCheckAvailable) return false
         return checkMutex.withLock {
             if (
                 isWithinRateLimit(
@@ -200,21 +209,8 @@ class LauncherUpgradeViewModel: ViewModel() {
                     GLOBAL_JSON.decodeFromString(RemoteData.serializer(), contentString)
                 }
             }.getOrElse { e ->
-                if (Locale.getDefault().language == "zh") {
-                    runCatching {
-                        Logger.info(TAG, "Check for updates in the Chinese region.")
-                        //在中国地区，可能因为无法访问 Github API 导致获取更新信息失败
-                        withRetry(logTag = "LauncherUpgrade_Chinese", maxRetries = 2) {
-                            GLOBAL_CLIENT.get(LATEST_API_CHINESE_URL).safeBodyAsJson<RemoteData>()
-                        }
-                    }.getOrElse { e ->
-                        Logger.warning(TAG, "Failed to check for launcher upgrade!", e)
-                        null
-                    }
-                } else {
-                    Logger.warning(TAG, "Failed to check for launcher upgrade!", e)
-                    null
-                }
+                Logger.warning(TAG, "Failed to check for launcher upgrade!", e)
+                null
             }
         }
     }

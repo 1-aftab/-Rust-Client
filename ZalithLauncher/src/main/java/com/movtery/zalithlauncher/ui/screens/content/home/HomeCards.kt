@@ -37,6 +37,7 @@ import com.movtery.cardgrid.model.CardType
 import com.movtery.zalithlauncher.BuildConfig
 import com.movtery.zalithlauncher.BuildKeys
 import com.movtery.zalithlauncher.R
+import com.movtery.zalithlauncher.launcherName
 import com.movtery.zalithlauncher.ui.components.BackgroundCard
 import com.movtery.zalithlauncher.ui.screens.content.home.server.ServerCardContent
 import com.movtery.zalithlauncher.ui.screens.content.home.version.VersionCardContent
@@ -97,8 +98,35 @@ object HomeCards {
 
     /** 系统卡片（不可变更） */
     fun systemCards(): List<SystemCard> = buildList {
+        add(unofficialNoticeCard())
         if (BuildConfig.DEBUG) {
             add(debugWarningCard())
+        }
+    }
+
+    /**
+     * Rust Client: permanent "unofficial modified version" notice on the main interface,
+     * as required by the upstream additional terms (GPLv3 §7(c)). Do not remove.
+     */
+    private fun unofficialNoticeCard() = SystemCard(id = "system_unofficial_notice") {
+        BackgroundCard(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.extraLarge
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.rust_client_unofficial_title),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    modifier = Modifier.alpha(0.8f),
+                    text = stringResource(R.string.rust_client_unofficial_text, BuildKeys.LAUNCHER_NAME, launcherName()),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
     }
 
