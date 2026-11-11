@@ -38,7 +38,7 @@ import io.github.juanluci.starling.StarlingActivity
  * | Layout event | Rust Edition |
  * |---|---|
  * | key (`GLFW_KEY_*`) | the Android key code of the same key |
- * | mouse button (`GLFW_MOUSE_BUTTON_*`) | left / right / middle button |
+ * | mouse button (`GLFW_MOUSE_BUTTON_*`, as a key or a launcher event) | left / right / middle button, at the pointer |
  * | scroll up / down (single or held) | one wheel line per press |
  * | switch / show / hide layer | handled by the layout itself |
  * | switch IME | the game's on-screen keyboard |
@@ -52,6 +52,13 @@ class RustInputAdapter {
 
     /** The layout's "game menu" control was pressed */
     var onSwitchMenu: (() -> Unit)? = null
+
+    /**
+     * Where the mouse pointer shows on a screen of the game, in the game window's pixels, or
+     * null while a world is played. A button is pressed there: the game is told the place
+     * again right before, so the click lands under the pointer the player sees.
+     */
+    var pointerPlace: (() -> Pair<Float, Float>?)? = null
 
     /** Tells the engine the host's controls are in use, so it puts its own touch controls away */
     fun setEnabled(enabled: Boolean) = native {
@@ -70,6 +77,12 @@ class RustInputAdapter {
                 }
             }
             ClickEvent.Type.LauncherEvent -> {
+                // the layouts' mouse buttons are launcher events named after the GLFW button
+                if (event.key.startsWith("GLFW_MOUSE_")) {
+                    val code = ControlEventKeycode.getKeycodeFromEvent(event.key)?.toInt() ?: return
+                    button(code, pressed)
+                    return
+                }
                 if (!pressed) return
                 when (event.key) {
                     LAUNCHER_EVENT_SCROLL_UP, LAUNCHER_EVENT_SCROLL_UP_SINGLE -> wheel(1f)
@@ -92,7 +105,12 @@ class RustInputAdapter {
     /** @param button 0 left, 1 right, 2 middle (GLFW's numbers; others are ignored) */
     fun button(button: Int, pressed: Boolean) {
         if (button !in BUTTON_LEFT..BUTTON_MIDDLE) return
-        if (pressed) heldButtons.add(button) else heldButtons.remove(button)
+        if (pressed) {
+            pointerPlace?.invoke()?.let { (x, y) -> cursor(x, y) }
+            heldButtons.add(button)
+        } else {
+            heldButtons.remove(button)
+        }
         native { StarlingActivity.nativeExternalButton(button, pressed) }
     }
 

@@ -243,6 +243,16 @@ private fun Overlay(
         val game = toGame(placed)
         adapter.cursor(game.x, game.y)
     }
+    // the layout's mouse buttons click where the pointer shows
+    DisposableEffect(adapter, captured) {
+        adapter.pointerPlace = {
+            if (!captured && cursor.isSpecified) {
+                val game = toGame(cursor)
+                game.x to game.y
+            } else null
+        }
+        onDispose { adapter.pointerPlace = null }
+    }
     // a screen of the game opened: the pointer starts in its middle, as in the Java Edition
     LaunchedEffect(captured, size, mode) {
         if (!captured && size != IntSize.Zero && mode == MouseControlMode.SLIDE) {
