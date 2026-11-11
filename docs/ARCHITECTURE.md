@@ -248,3 +248,27 @@ launcher's are the only ones), and the offer to import another app's worlds is o
 In the Rust Edition's process the settings are read on every start and resume
 (`RustGameActivity`: `loadAllSettings`), and the layout editor opens as
 `RustControlEditorActivity`: the launcher's editor, translucent, in the game's process and task.
+
+## Rust Edition mods (the mod compiler)
+
+The Rust engine has no mod loader. A Rust Edition mod (`.hnmod`, "native mod" in the catalog) is
+Rust source that has to be compiled into the game itself. Upstream does that on its own build
+server, which would send back a game without this launcher's patches, so Rust Client compiles
+its own, for free, on GitHub Actions in this repository:
+
+1. The player installs mods from the catalog and presses **Compile** on the Mods page.
+2. Patch `0009` (`game/native_builds.rs`, `request_build`) first looks in this repository's
+   `native-builds` release for a build of exactly those mods and downloads it if there is one.
+   Otherwise it opens a filled-in GitHub issue titled `[native build] <mods>` in the browser.
+3. `.github/workflows/native-mods.yml` reads the issue, fetches the engine as the APK's is
+   (`RustEngine/tools/build_engine.py --fetch-only`: `engine.lock` + `patches/`), fetches the
+   mods from the registry checked against its SHA-256 (`RustEngine/tools/native_mods.py`), runs
+   the engine's own `packaging/android/native_build.sh`, and uploads `v<version>__<ids>.so` and
+   `.json` to the release `native-builds`. The issue is answered and closed.
+4. Pressing Compile again downloads the build; it is used from the next start. The engine's own
+   safety checks stay: SHA-256, and a build is only loaded by the APK install it was fetched under.
+
+Limits: ARM64 only; the workflow runs on issues only once it is on the default branch; a build
+is made for one engine version, so every engine update needs new builds; a mod that does not
+compile against this engine version fails the build. The repository to ask is the constant
+`MOD_BUILDS` in `starling_releases.rs` (patch `0009`): a fork has to change it.

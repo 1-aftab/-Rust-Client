@@ -1,0 +1,260 @@
+# Rust Edition mods, compiled for free on GitHub's machines.
+#
+# The Rust engine has no mod loader: a mod is Rust source that is compiled into the game. The
+# game's Compile button opens an issue titled "[native build] ..." that lists the mods; this
+# workflow builds the engine exactly as the APK's (RustEngine/tools/build_engine.py: upstream at
+# engine.lock, plus RustEngine/patches) with those mods mixed in, and publishes the library to
+# the release "native-builds", where the game finds and downloads it (docs/ARCHITECTURE.md).
+#
+# Anyone may ask for a build. A mod is third-party code that runs while it compiles, so the
+# build job holds no secret and can only read the repository; only the publish job can write.
+name: Rust Edition mods
+
+on:
+  issues:
+    types: [opened]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Engine version of the APK (Settings shows it; 0.8.0)"
+        required: true
+        default: "0.8.0"
+      mods:
+        description: "Mod ids from the catalog, with spaces between (zoom minimap@1.0.0)"
+        required: true
+  # A change to the builder is tried on one small mod, without publishing.
+  push:
+    paths:
+      - ".github/workflows/native-mods.yml"
+      - "RustEngine/tools/native_mods.py"
+      - "RustEngine/patches/0009-*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-mods-${{ github.event.issue.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  request:
+    if: github.event_name != 'issues' || startsWith(github.event.issue.title, '[native build]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      mods: ${{ steps.read.outputs.mods }}
+      name: ${{ steps.read.outputs.name }}
+      made: ${{ steps.read.outputs.made }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      EVENT: ${{ github.event_name }}
+      ISSUE: ${{ github.event.issue.number }}
+      BODY: ${{ github.event.issue.body }}
+      IN_VERSION: ${{ inputs.version }}
+      IN_MODS: ${{ inputs.mods }}
+    steps:
+      - name: Read the request
+        id: read
+        run: |
+          python3 - <<'EOF'
+          import json, os, re, subprocess, sys
+
+          def refuse(text):
+              print(f"::error::{text}")
+              if os.environ["EVENT"] == "issues":
+                  subprocess.run(["gh", "issue", "close", os.environ["ISSUE"], "--reason", "not planned",
+                                  "--comment", f"This request can't be built: {text}"])
+              sys.exit(1)
+
+          event = os.environ["EVENT"]
+          if event == "issues":
+              body = os.environ.get("BODY", "").replace("\r", "")
+              parts = dict(re.findall(r"^### (\w+)[^\n]*\n+(.*?)(?=\n### |\Z)", body, re.S | re.M))
+              version, mods = parts.get("Version", "").strip(), parts.get("Mods", "")
+          elif event == "workflow_dispatch":
+              version, mods = os.environ["IN_VERSION"].strip(), os.environ["IN_MODS"]
+          else:
+              version, mods = "0.8.0", "zoom"
+          if not re.fullmatch(r"[0-9]+(\.[0-9]+){1,3}", version):
+              refuse("the request does not say the game's version.")
+          wanted = {}
+          for word in re.split(r"[\s,]+", mods.strip()):
+              if not word:
+                  continue
+              name, _, ver = word.partition("@")
+              if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,40}", name) or (
+                      ver and not re.fullmatch(r"[0-9A-Za-z][0-9A-Za-z.+_-]{0,40}", ver)):
+                  refuse("a mod is not written as id or id@version.")
+              wanted[name] = ver
+          if not wanted:
+              refuse("the request names no mod.")
+          if len(wanted) > 40:
+              refuse("at most 40 mods in one build.")
+          name = f"v{version}__" + "__".join(sorted(wanted))
+          if len(name) > 180:
+              refuse("too many mods for one build's name; ask for fewer.")
+          listed = " ".join(f"{m}@{v}" if v else m for m, v in sorted(wanted.items()))
+
+          made = "false"
+          release = subprocess.run(["gh", "release", "view", "native-builds", "--json", "assets"],
+                                   capture_output=True, text=True)
+          if release.returncode == 0:
+              assets = {a["name"] for a in json.loads(release.stdout)["assets"]}
+              if {f"{name}.so", f"{name}.json"} <= assets and event == "issues":
+                  made = "true"
+                  subprocess.run(["gh", "issue", "close", os.environ["ISSUE"], "--comment",
+                                  f"`{name}` is already built. In the game press Compile again "
+                                  "(or Options > Mods > Native mods) and it downloads."])
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"version={version}\nmods={listed}\nname={name}\nmade={made}\n")
+          print(name, "|", listed, "| made:", made)
+          EOF
+
+      - name: Say it started
+        if: github.event_name == 'issues' && steps.read.outputs.made != 'true'
+        run: |
+          gh issue comment "$ISSUE" --body "Building \`${{ steps.read.outputs.name }}\`: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          It takes from 20 minutes to 2 hours. This issue is answered and closed when it ends."
+
+  build:
+    needs: request
+    if: needs.request.outputs.made != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    permissions:
+      contents: read
+    env:
+      ABI: arm64-v8a
+      # The profile the APK's own engine is built with (build.yml).
+      PROFILE: quick
+      VERSION: ${{ needs.request.outputs.version }}
+      MODS: ${{ needs.request.outputs.mods }}
+      NAME: ${{ needs.request.outputs.name }}
+      CARGO_BUILD_JOBS: 3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Swap (the engine's link step needs more memory than the runner has)
+        run: |
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile /swapfile
+          sudo fallocate -l 16G /mnt/swapfile
+          sudo chmod 600 /mnt/swapfile
+          sudo mkswap /mnt/swapfile
+          sudo swapon /mnt/swapfile
+          free -h
+
+      - name: Set up JDK 25 (the engine compiles its data exporters with it)
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "25"
+
+      - name: Install the Android tools upstream pins
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "ndk;28.2.13676358" "build-tools;35.0.0" "platforms;android-36" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version 3.5.4 --locked
+
+      - name: Fetch and patch the engine source
+        run: |
+          python3 RustEngine/tools/build_engine.py --fetch-only
+          cd RustEngine/.engine-src
+          # native_build.sh builds "the source as committed": Rust Client's patches and names
+          # become a commit of this checkout.
+          git add -A
+          git -c user.name="Rust Client" -c user.email="rust-client@users.noreply.github.com" \
+            commit -q -m "Rust Client"
+          ours=$(sed -n 's/^VERSION_NAME = "\(.*\)"$/\1/p' packaging/android/build_apk.py)
+          if [ "$ours" != "$VERSION" ]; then
+            echo "::error::This repository builds engine $ours; the request is for $VERSION. Update the app."
+            exit 1
+          fi
+
+      - name: Fetch the mods from the registry
+        run: python3 RustEngine/tools/native_mods.py "$MODS" "$RUNNER_TEMP/bundles"
+
+      - name: Cache the Cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ~/.cache/starling-native/build-arm64-v8a -> target
+          shared-key: rust-mods-arm64-v8a-quick
+          key: ${{ hashFiles('RustEngine/engine.lock', 'RustEngine/patches/**') }}
+          cache-on-failure: true
+          cache-all-crates: true
+
+      - name: Compile the game with the mods
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          mapfile -t bundles < "$RUNNER_TEMP/bundles/bundles.txt"
+          NATIVE_LIBRARY_ONLY=1 bash RustEngine/.engine-src/packaging/android/native_build.sh \
+            "$PWD/RustEngine/.engine-src" "$RUNNER_TEMP/out" "${bundles[@]}"
+          mv "$RUNNER_TEMP/out/libhorizon_android.so" "$RUNNER_TEMP/out/$NAME.so"
+          mv "$RUNNER_TEMP/out/build.json" "$RUNNER_TEMP/out/$NAME.json"
+          ls -l "$RUNNER_TEMP/out"
+
+      - name: Upload the build
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-build
+          path: ${{ runner.temp }}/out
+          if-no-files-found: error
+          retention-days: 3
+
+  publish:
+    needs: [request, build]
+    if: always() && needs.request.result == 'success' && needs.request.outputs.made != 'true' && github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      NAME: ${{ needs.request.outputs.name }}
+      ISSUE: ${{ github.event.issue.number }}
+      RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Download the build
+        if: needs.build.result == 'success'
+        uses: actions/download-artifact@v8
+        with:
+          name: native-build
+          path: out
+
+      - name: Publish
+        if: needs.build.result == 'success'
+        run: |
+          # Only the two files of this request, whatever the build job made.
+          test -f "out/$NAME.so" && test -f "out/$NAME.json"
+          python3 -c "import json,sys; json.load(open(sys.argv[1]))" "out/$NAME.json"
+          gh release view native-builds >/dev/null 2>&1 || gh release create native-builds \
+            --prerelease --latest=false --target "$GITHUB_SHA" --title "Rust Edition mod builds" \
+            --notes "The Rust engine compiled with mods, made by the workflow \"Rust Edition mods\". The game downloads these by itself: press Compile on the Mods page."
+          gh release upload native-builds "out/$NAME.so" "out/$NAME.json" --clobber
+
+      - name: Answer the request
+        if: github.event_name == 'issues'
+        run: |
+          if [ "${{ needs.build.result }}" = "success" ]; then
+            gh issue close "$ISSUE" --comment "\`$NAME\` is built. In the game open Options > Mods and press Compile again: it downloads the build, then restart the game."
+          else
+            gh issue close "$ISSUE" --reason "not planned" --comment "The build did not succeed. Usually one of the mods does not compile against this engine version, or two of them clash. Ask again with fewer mods to find which one. The log: $RUN"
+          fi
