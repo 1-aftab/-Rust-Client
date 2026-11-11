@@ -101,8 +101,6 @@ fun AboutInfoScreen(
                     title = stringResource(R.string.about_launcher_title)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        val launcherName = remember { launcherName() }
-
                         ButtonIconItem(
                             icon = painterResource(R.drawable.img_launcher),
                             title = BuildKeys.LAUNCHER_NAME,
@@ -122,22 +120,6 @@ fun AboutInfoScreen(
                                     Text(text = stringResource(R.string.about_launcher_project_link))
                                 }
                             }
-                        )
-
-                        //Rust Client: upstream attribution, required by the upstream additional terms (GPLv3 §7)
-                        ButtonIconItem(
-                            icon = painterResource(R.drawable.ic_copyright_outlined),
-                            title = stringResource(R.string.rust_client_unofficial_title),
-                            text = stringResource(R.string.rust_client_unofficial_text, BuildKeys.LAUNCHER_NAME, launcherName),
-                            button = {}
-                        )
-
-                        ButtonIconItem(
-                            icon = painterResource(R.drawable.img_avatar_movtery),
-                            title = stringResource(R.string.about_launcher_author_movtery_title),
-                            text = stringResource(R.string.about_launcher_author_movtery_text, launcherName),
-                            //Rust Client: credit kept, no donation link
-                            button = {}
                         )
                     }
                 }

@@ -48,7 +48,7 @@ object RustEdition {
     const val MINECRAFT_VERSION = "26.3"
 
     /** The engine the Rust Edition is built from */
-    const val ENGINE_NAME = "Starling"
+    const val ENGINE_NAME = "Rust"
 
     /** `VK_API_VERSION_1_3`, as `PackageManager.FEATURE_VULKAN_HARDWARE_VERSION` words it */
     private const val VULKAN_1_3 = 0x400003

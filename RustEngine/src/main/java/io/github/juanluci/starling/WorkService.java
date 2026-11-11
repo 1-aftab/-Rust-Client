@@ -59,7 +59,7 @@ public final class WorkService extends Service {
 
     private static String line() {
         synchronized (REASONS) {
-            String last = "Starling is working";
+            String last = "Rust Client is working";
             for (String line : REASONS.values()) {
                 last = line;
             }
@@ -75,7 +75,7 @@ public final class WorkService extends Service {
                     (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
             if (manager != null) {
                 manager.createNotificationChannel(new NotificationChannel(
-                        CHANNEL, "Starling at work", NotificationManager.IMPORTANCE_LOW));
+                        CHANNEL, "Rust Client at work", NotificationManager.IMPORTANCE_LOW));
             }
             builder = new Notification.Builder(this, CHANNEL);
         } else {
@@ -83,7 +83,7 @@ public final class WorkService extends Service {
         }
         Notification notification = builder
                 .setSmallIcon(getApplicationInfo().icon)
-                .setContentTitle("Starling")
+                .setContentTitle("Rust Client")
                 .setContentText(line())
                 .setOngoing(true)
                 .build();

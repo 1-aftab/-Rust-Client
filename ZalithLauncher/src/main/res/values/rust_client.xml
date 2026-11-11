@@ -19,13 +19,6 @@
   -->
 <!-- Strings added by Rust Client. Kept out of strings.xml so upstream merges stay clean. -->
 <resources>
-    <!-- Title of the permanent notice on the home screen and in About -->
-    <string name="rust_client_unofficial_title">Unofficial Modified Version</string>
-    <!-- Body of the notice; %1$s is this app's name, %2$s is the upstream launcher's name -->
-    <string name="rust_client_unofficial_text">%1$s is an unofficial modified version of %2$s 2. It is not affiliated with or endorsed by the %2$s developers, so please do not report %1$s problems to them. Licensed under GPL-3.0.</string>
-    <!-- Button in About that opens the upstream project page -->
-    <string name="rust_client_upstream_link">Original Project</string>
-
     <!-- The activity the engine module starts as the game (EngineHost.gameIntent) -->
     <string name="rust_engine_game_activity" translatable="false">com.movtery.zalithlauncher.game.rust.RustGameActivity</string>
 

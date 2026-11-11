@@ -25,6 +25,8 @@ import com.movtery.zalithlauncher.ui.control.event.LAUNCHER_EVENT_SCROLL_DOWN
 import com.movtery.zalithlauncher.ui.control.event.LAUNCHER_EVENT_SCROLL_DOWN_SINGLE
 import com.movtery.zalithlauncher.ui.control.event.LAUNCHER_EVENT_SCROLL_UP
 import com.movtery.zalithlauncher.ui.control.event.LAUNCHER_EVENT_SCROLL_UP_SINGLE
+import com.movtery.zalithlauncher.ui.control.event.LAUNCHER_EVENT_SWITCH_IME
+import com.movtery.zalithlauncher.ui.control.event.LAUNCHER_EVENT_SWITCH_MENU
 import io.github.juanluci.starling.StarlingActivity
 
 /**
@@ -39,11 +41,17 @@ import io.github.juanluci.starling.StarlingActivity
  * | mouse button (`GLFW_MOUSE_BUTTON_*`) | left / right / middle button |
  * | scroll up / down (single or held) | one wheel line per press |
  * | switch / show / hide layer | handled by the layout itself |
- * | switch IME, open the Zalith game menu, send text | not available (ignored) |
+ * | switch IME | the game's on-screen keyboard |
+ * | open the game menu | the launcher's menu over the game ([onSwitchMenu]) |
+ * | send text | not available (ignored) |
  */
 class RustInputAdapter {
     private val heldKeys = HashSet<Int>()
     private val heldButtons = HashSet<Int>()
+    private val heldFingers = HashSet<Int>()
+
+    /** The layout's "game menu" control was pressed */
+    var onSwitchMenu: (() -> Unit)? = null
 
     /** Tells the engine the host's controls are in use, so it puts its own touch controls away */
     fun setEnabled(enabled: Boolean) = native {
@@ -66,6 +74,8 @@ class RustInputAdapter {
                 when (event.key) {
                     LAUNCHER_EVENT_SCROLL_UP, LAUNCHER_EVENT_SCROLL_UP_SINGLE -> wheel(1f)
                     LAUNCHER_EVENT_SCROLL_DOWN, LAUNCHER_EVENT_SCROLL_DOWN_SINGLE -> wheel(-1f)
+                    LAUNCHER_EVENT_SWITCH_IME -> keyboard()
+                    LAUNCHER_EVENT_SWITCH_MENU -> onSwitchMenu?.invoke()
                 }
             }
             else -> {}
@@ -91,6 +101,33 @@ class RustInputAdapter {
         StarlingActivity.nativeExternalMouse(MOUSE_RELATIVE, dx, dy)
     }
 
+    /** Puts the mouse pointer at a place of the game's window, in its pixels */
+    fun cursor(x: Float, y: Float) = native {
+        StarlingActivity.nativeExternalMouse(MOUSE_ABSOLUTE, x, y)
+    }
+
+    /**
+     * A finger on the controls' window, handed to the game as a touch on its own.
+     * @param phase [TOUCH_DOWN], [TOUCH_MOVE], [TOUCH_UP] or [TOUCH_CANCEL]
+     */
+    fun touch(finger: Int, phase: Int, x: Float, y: Float) {
+        when (phase) {
+            TOUCH_DOWN -> heldFingers.add(finger)
+            TOUCH_UP, TOUCH_CANCEL -> heldFingers.remove(finger)
+        }
+        native { StarlingActivity.nativeExternalTouch(finger, phase, x, y) }
+    }
+
+    /** Shows the game's on-screen keyboard for the text field in use */
+    fun keyboard() = native { StarlingActivity.nativeExternalKeyboard() }
+
+    /** Whether the game takes the controls' input now (not while it starts or is paused) */
+    fun ready(): Boolean = try {
+        StarlingActivity.nativeExternalReady()
+    } catch (_: UnsatisfiedLinkError) {
+        false
+    }
+
     /** Turns the mouse wheel by [lines]; up is positive */
     fun wheel(lines: Float) = native {
         StarlingActivity.nativeExternalMouse(MOUSE_WHEEL, 0f, lines)
@@ -106,6 +143,10 @@ class RustInputAdapter {
             native { StarlingActivity.nativeExternalButton(button, false) }
         }
         heldButtons.clear()
+        heldFingers.toList().forEach { finger ->
+            native { StarlingActivity.nativeExternalTouch(finger, TOUCH_CANCEL, 0f, 0f) }
+        }
+        heldFingers.clear()
     }
 
     /** An engine built without the Rust Client patch has none of these functions */
@@ -121,6 +162,12 @@ class RustInputAdapter {
         const val BUTTON_RIGHT = 1
         const val BUTTON_MIDDLE = 2
 
+        const val TOUCH_DOWN = 0
+        const val TOUCH_MOVE = 1
+        const val TOUCH_UP = 2
+        const val TOUCH_CANCEL = 3
+
+        private const val MOUSE_ABSOLUTE = 0
         private const val MOUSE_RELATIVE = 1
         private const val MOUSE_WHEEL = 2
     }

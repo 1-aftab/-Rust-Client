@@ -906,7 +906,7 @@ class VMActivity : BaseAppCompatActivity(), SurfaceTextureListener {
         SdlBridge.prepareSurface(this, nativeSurface, gameTextureView?.parent as? ViewGroup, surface)
         //游戏请求 GLFW direct gamepad 时的通知接收方
         CallbackBridge.setDirectGamepadEnableHandler {
-            LoggerBridge.append("ZalithLauncher: Direct gamepad handler enabled")
+            LoggerBridge.append("RustClient: Direct gamepad handler enabled")
         }
         if (vmViewModel.isRunning) {
             ZLBridge.setupBridgeWindow(nativeSurface)

@@ -106,8 +106,7 @@ its account screens. Rust Client therefore hosts it rather than embeds it:
 |---|---|
 | Edition selector, launch button, folder shortcuts | Rust Client (Compose) |
 | Game window, rendering, title screen, menus, inventory, settings | Starling, unchanged |
-| On-screen controls **while a world is played** | Rust Client: the Zalith control layout |
-| Touch in menus and the inventory | Starling's own touch handling |
+| On-screen controls, mouse pointer, game menu | Rust Client: the launcher's control layout and menu |
 | Player name and skin | the launcher's current account, handed over at every start |
 
 ### Pieces
@@ -157,12 +156,30 @@ LayerController widget ─ ClickEvent ─▶ RustInputAdapter ─▶ StarlingAct
                                                             keyboard / mouse window events
 ```
 
-The engine calls `capturePointer(true)` when a world takes the mouse and `capturePointer(false)`
-for every menu; the overlay is shown and hidden on exactly that signal. Outside the widgets a drag
-turns the view, a tap is a right click, a long press holds the left button.
+The overlay is shown while the engine reads the host's input (`nativeExternalReady`, polled by
+`RustGameActivity`; false while the engine starts and while it is paused) and has two states,
+switched by the engine's `capturePointer`:
 
-Not mapped: the layout events "switch IME", "open Zalith game menu" and "send text"; gamepad and
-gyroscope settings of the launcher; per-version control layouts (the global one is used).
+| State | What the overlay does |
+|---|---|
+| A world is played (`capturePointer(true)`) | The layout's controls; outside them a drag turns the view, a tap is a right click, a long press holds the left button. |
+| A screen of the game (`capturePointer(false)`) | The layout's menu-state controls and the launcher's mouse pointer. Mouse mode *slide*: a touchpad (drag moves the pointer, tap clicks, long press drags, two fingers scroll), sent as mouse events. Mouse mode *click*: every finger is handed to the engine as a touch of its own (`nativeExternalTouch`), so its screens are used directly. |
+
+Over both sit the floating menu button and the game menu (`GameMenu` in `RustControlsOverlay.kt`):
+input method (`nativeExternalKeyboard`), control layout picker, the layout editor
+(`ControlEditorActivity`; the layout is reloaded on return), opacity and mouse settings, quit.
+The layout events "switch IME" and "open game menu" do the same.
+
+Engine side (patches 0004 and 0005): the screens that read touches only (mod catalog, the cards
+over the title) take the pointer's left button as a finger; the on-screen keyboard also opens
+without the engine's touch mode; the engine's update offer is off; the engine's own screens use
+the launcher's dark colour scheme (`horizon-theme` `DARK`).
+
+`tools/build_engine.py` finally renames the engine in every text it shows (translations and the
+string literals of its Rust sources), so the player only ever reads the launcher's name.
+
+Not mapped: the layout event "send text"; gamepad and gyroscope settings of the launcher;
+per-version control layouts (the global one is used).
 
 ### Storage
 
