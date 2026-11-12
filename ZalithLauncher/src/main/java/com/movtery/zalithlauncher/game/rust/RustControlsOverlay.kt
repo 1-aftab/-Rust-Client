@@ -382,6 +382,7 @@ private fun Overlay(
             },
             onEditLayout = { current?.file?.let(onEditLayout) },
             onKeyboard = { adapter.keyboard() },
+            cheats = remember(context) { RustCheats(RustEdition.gameFolder(context)) },
             onMoveHud = {
                 adapter.releaseAll()
                 hudEditor = true
@@ -459,13 +460,19 @@ private fun GameMenu(
     onLayout: (LayoutEntry) -> Unit,
     onEditLayout: () -> Unit,
     onKeyboard: () -> Unit,
+    cheats: RustCheats,
     onMoveHud: () -> Unit,
     onQuit: () -> Unit
 ) {
+    // the "Cheats" page takes the menu's place while it is open
+    var cheatsPage by remember { mutableStateOf(false) }
     MenuSubscreen(
         state = state,
         closeScreen = close
     ) {
+        if (cheatsPage) {
+            CheatsPage(cheats = cheats, onBack = { cheatsPage = false })
+        } else {
         Text(
             modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
             text = stringResource(R.string.game_menu_title),
@@ -513,6 +520,13 @@ private fun GameMenu(
                         close()
                         onEditLayout()
                     }
+                )
+            }
+            item {
+                MenuTextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = "Cheats",
+                    onClick = { cheatsPage = true }
                 )
             }
             item {
@@ -633,6 +647,63 @@ private fun GameMenu(
                     modifier = Modifier.fillMaxWidth(),
                     text = stringResource(R.string.game_button_force_close),
                     onClick = onQuit
+                )
+            }
+        }
+        }
+    }
+}
+
+/** The game menu's "Cheats" page: a switch a module, and a slider under one that has a value */
+@Composable
+private fun CheatsPage(cheats: RustCheats, onBack: () -> Unit) {
+    Text(
+        modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
+        text = "Cheats",
+        style = MaterialTheme.typography.titleMedium
+    )
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(all = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            MenuTextButton(
+                modifier = Modifier.fillMaxWidth(),
+                text = "< Back",
+                onClick = onBack
+            )
+        }
+        item {
+            MenuTextButton(
+                modifier = Modifier.fillMaxWidth(),
+                text = "Turn everything off",
+                onClick = { cheats.allOff() }
+            )
+        }
+        val rows = RustCheats.ROWS
+        items(rows.size) { index ->
+            when (val row = rows[index]) {
+                is RustCheats.Header -> Text(
+                    modifier = Modifier.padding(start = 8.dp, top = 8.dp),
+                    text = row.label,
+                    style = MaterialTheme.typography.labelLarge
+                )
+                is RustCheats.Switch -> MenuSwitchButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = row.label,
+                    switch = cheats.isOn(row.key),
+                    onSwitch = { cheats.setOn(row.key, it) }
+                )
+                is RustCheats.Slider -> MenuSliderLayout(
+                    modifier = Modifier.fillMaxWidth(),
+                    title = row.label + if (row.scale == 10) " (tenths)" else "",
+                    value = cheats.value(row),
+                    valueRange = row.min.toFloat()..row.max.toFloat(),
+                    enabled = cheats.isOn(row.of),
+                    onValueChange = { cheats.setValue(row, it, write = false) },
+                    onValueChangeFinished = { cheats.setValue(row, it, write = true) },
+                    suffix = if (row.scale == 10) null else row.suffix
                 )
             }
         }
