@@ -194,6 +194,13 @@ private fun controlLayouts(locale: java.util.Locale): List<LayoutEntry> =
         }
         .sortedBy { it.name }
 
+/**
+ * The gyroscope reports radians a second; the engine's look takes pixels of mouse movement a
+ * sample. This many pixels for one radian a second at 100 % sensitivity (1 is what the Java
+ * Edition's gyroscope sends).
+ */
+private const val GYRO_SCALE = 1f
+
 @Composable
 private fun Overlay(
     adapter: RustInputAdapter,
@@ -327,6 +334,25 @@ private fun Overlay(
                 cursorShape = CursorShape.Arrow,
                 mouseSize = mouseSize,
                 mouseFile = getMouseFile(CursorShape.Arrow).ifExists()
+            )
+        }
+
+        // the launcher's gyroscope aiming (Settings > Controls > Gyroscope), as in the Java
+        // Edition: while the game holds the pointer, turning the phone turns the view
+        if (captured && AllSettings.gyroscopeControl.state &&
+            com.movtery.zalithlauncher.ui.control.gyroscope.isGyroscopeAvailable(androidx.compose.ui.platform.LocalContext.current)
+        ) {
+            com.movtery.zalithlauncher.ui.control.gyroscope.GyroscopeReader(
+                xEvent = { delta ->
+                    adapter.look(if (AllSettings.gyroscopeInvertX.state) -delta else delta, 0f)
+                },
+                yEvent = { delta ->
+                    adapter.look(0f, if (AllSettings.gyroscopeInvertY.state) delta else -delta)
+                },
+                sampleRate = AllSettings.gyroscopeSampleRate.state,
+                smoothing = AllSettings.gyroscopeSmoothing.state,
+                smoothingWindow = AllSettings.gyroscopeSmoothingWindow.state,
+                sensitivity = AllSettings.gyroscopeSensitivity.state / 100f * GYRO_SCALE
             )
         }
 
@@ -491,6 +517,26 @@ private fun GameMenu(
                     text = stringResource(R.string.rust_edition_touch_screen),
                     switch = AllSettings.rustTouchScreen.state,
                     onSwitch = { AllSettings.rustTouchScreen.save(it) }
+                )
+            }
+            item {
+                MenuSwitchButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = stringResource(R.string.settings_control_gyroscope_title),
+                    switch = AllSettings.gyroscopeControl.state,
+                    onSwitch = { AllSettings.gyroscopeControl.save(it) }
+                )
+            }
+            item {
+                MenuSliderLayout(
+                    modifier = Modifier.fillMaxWidth(),
+                    title = stringResource(R.string.settings_control_gyroscope_sensitivity_title),
+                    value = AllSettings.gyroscopeSensitivity.state,
+                    valueRange = AllSettings.gyroscopeSensitivity.floatRange,
+                    enabled = AllSettings.gyroscopeControl.state,
+                    onValueChange = { AllSettings.gyroscopeSensitivity.updateState(it) },
+                    onValueChangeFinished = { AllSettings.gyroscopeSensitivity.save(it) },
+                    suffix = "%"
                 )
             }
             item {

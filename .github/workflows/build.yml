@@ -53,6 +53,16 @@ jobs:
           path: RustEngine/prebuilt
           key: rust-engine-${{ env.ENGINE_ABI }}-${{ env.ENGINE_PROFILE }}-${{ hashFiles('RustEngine/engine.lock', 'RustEngine/patches/**', 'RustEngine/tools/**') }}
 
+      - name: Make room (the build with the built-in mods needs about 25 GB) and add swap
+        if: steps.prebuilt.outputs.cache-hit != 'true'
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/local/share/powershell \
+            /usr/local/lib/node_modules /opt/microsoft /opt/google || true
+          sudo docker image prune --all --force > /dev/null 2>&1 || true
+          sudo fallocate -l 6G /swap-engine && sudo chmod 600 /swap-engine && sudo mkswap /swap-engine \
+            && sudo swapon /swap-engine || echo "::warning::no extra swap"
+
       - name: Set up JDK 25 (the engine compiles its data exporters with it)
         if: steps.prebuilt.outputs.cache-hit != 'true'
         uses: actions/setup-java@v5
@@ -84,24 +94,24 @@ jobs:
         if: steps.prebuilt.outputs.cache-hit != 'true'
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: RustEngine/.engine-src -> target
-          shared-key: rust-engine-${{ env.ENGINE_ABI }}-${{ env.ENGINE_PROFILE }}
+          workspaces: ~/.cache/starling-native/build-arm64-v8a -> target
+          shared-key: rust-engine-mods-${{ env.ENGINE_ABI }}-${{ env.ENGINE_PROFILE }}
           cache-on-failure: true
 
       - name: Build the engine
         if: steps.prebuilt.outputs.cache-hit != 'true'
         run: python3 RustEngine/tools/build_engine.py --abi "$ENGINE_ABI" --profile "$ENGINE_PROFILE"
 
-      - name: Upload the engine
-        uses: actions/upload-artifact@v7
-        with:
-          name: rust-engine
-          path: RustEngine/prebuilt
-          if-no-files-found: error
+      # No artifact: the account's artifact storage is limited. The cache step above saves
+      # RustEngine/prebuilt when this job ends, and build-rust restores it by the same key.
+      - name: Check the engine
+        run: test -f RustEngine/prebuilt/engine.json
 
   build:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
       matrix:
         arch: ["arm", "x86", "x86_64"]
@@ -124,11 +134,14 @@ jobs:
         with:
           arch: ${{ matrix.arch }}
           variant: ${{ inputs.variant }}
+          token: ${{ github.token }}
 
   build-rust:
     needs: engine
     if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
       matrix:
         arch: ["all", "arm64"]
@@ -146,12 +159,12 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Download the engine
+      - name: Restore the built engine
         continue-on-error: true
-        uses: actions/download-artifact@v8
+        uses: actions/cache/restore@v4
         with:
-          name: rust-engine
           path: RustEngine/prebuilt
+          key: rust-engine-arm64-v8a-quick-${{ hashFiles('RustEngine/engine.lock', 'RustEngine/patches/**', 'RustEngine/tools/**') }}
 
       - name: Show the engine
         run: |
@@ -167,3 +180,4 @@ jobs:
         with:
           arch: ${{ matrix.arch }}
           variant: ${{ inputs.variant }}
+          token: ${{ github.token }}

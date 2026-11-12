@@ -272,3 +272,16 @@ Limits: ARM64 only; the workflow runs on issues only once it is on the default b
 is made for one engine version, so every engine update needs new builds; a mod that does not
 compile against this engine version fails the build. The repository to ask is the constant
 `MOD_BUILDS` in `starling_releases.rs` (patch `0009`): a fork has to change it.
+
+## Built-in Rust Edition mods, gyroscope, CI storage
+
+- `RustEngine/tools/builtin-mods.txt` lists registry mods that are compiled into the engine of
+  every APK (`build_engine.py` → `build_with_mods`, which runs upstream's `native_build.sh`).
+  They are switched on and off in the game under Options > Mods. The mod compiler adds the same
+  list to every build it makes and records them under `builtin` in the build's JSON, so that
+  `mods` still names only what was requested (the game matches builds by it).
+- Gyroscope aiming in the Rust Edition is the launcher's own (`GyroscopeReader`), fed to the
+  engine as relative mouse movement in `RustControlsOverlay.kt` while the game holds the
+  pointer. Its switch and sensitivity are also in the Rust game menu.
+- CI stores nothing as artifacts: APKs are uploaded to the release `latest-build`, and the
+  engine and the mod builds pass between jobs through `actions/cache`.

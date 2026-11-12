@@ -178,6 +178,63 @@ def upstream():
     return module
 
 
+BUILTIN = MODULE / "tools" / "builtin-mods.txt"
+
+
+def builtin_mods():
+    """The mods compiled into the engine: `id@version`, as builtin-mods.txt lists them."""
+    if not BUILTIN.is_file():
+        return []
+    lines = (line.split("#")[0].strip() for line in BUILTIN.read_text(encoding="utf-8").splitlines())
+    return [line for line in lines if line]
+
+
+def build_with_mods(mods, profile, abi, sdk):
+    """The game library with `mods` mixed in, by upstream's own native_build.sh (what its mod
+    builds are made with): the stripped library's path. The script builds "the source as
+    committed", so the patched and renamed source becomes a commit of the checkout first."""
+    run("git", "add", "-A", cwd=SOURCE)
+    run("git", "-c", "user.name=Rust Client", "-c", "user.email=rust-client@users.noreply.github.com",
+        "commit", "-q", "--allow-empty", "-m", "Rust Client", cwd=SOURCE)
+    # build_apk.py wants these to exist even when it stops at the library, which uses neither.
+    for folder in (sdk / "build-tools" / "35.0.0", sdk / "platforms" / "android-36"):
+        folder.mkdir(parents=True, exist_ok=True)
+    jar = sdk / "platforms" / "android-36" / "android.jar"
+    if not jar.exists():
+        jar.touch()
+    work = SOURCE / "target" / "builtin-mods"
+    shutil.rmtree(work, ignore_errors=True)
+    bundles = work / "bundles"
+    out = work / "out"
+    out.mkdir(parents=True)
+    run(sys.executable, MODULE / "tools" / "native_mods.py", " ".join(mods), bundles)
+    paths = (bundles / "bundles.txt").read_text().split("\n")
+    env = dict(os.environ, PROFILE=profile, ABI=abi, NATIVE_LIBRARY_ONLY="1", CARGO_TERM_COLOR="never")
+    log = work / "build.log"
+    with log.open("wb") as sink:
+        build = subprocess.Popen(
+            ["bash", str(SOURCE / "packaging" / "android" / "native_build.sh"), str(SOURCE), str(out)]
+            + [p for p in paths if p],
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        for line in build.stdout:
+            sys.stdout.buffer.write(line)
+            sys.stdout.buffer.flush()
+            sink.write(line)
+    if build.wait() != 0:
+        # What failed, where a workflow's annotations show it (the log is long).
+        import re
+        text = re.sub(r"\x1b\[[0-9;]*m", "", log.read_text(errors="replace")).splitlines()
+        errors = []
+        for at, line in enumerate(text):
+            if line.startswith("error") and not line.startswith("error: could not compile"):
+                where = next((l.strip() for l in text[at + 1:at + 4] if "-->" in l), "")
+                errors.append(f"{line.strip()} {where}")
+        print(f"::error::built-in mods, {len(errors)} errors: " + " || ".join(errors[:25])[:3800])
+        print("::error::last lines: " + " | ".join(text[-8:])[:3500])
+        sys.exit("build_engine: the engine did not build with the built-in mods")
+    return out / "libhorizon_android.so"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--abi", default="arm64-v8a",
@@ -202,10 +259,14 @@ def main():
     sdk = build_apk.sdk_dir()
     triple = build_apk.TARGETS[args.abi][0]
 
-    # 1. The game library.
-    build_apk.build_library(args.profile, ndk, sdk, args.abi)
-    profile_dir = "debug" if args.profile == "dev" else args.profile
-    built = SOURCE / "target" / triple / profile_dir / f"lib{build_apk.LIBRARY}.so"
+    # 1. The game library: with the built-in mods when there are any (builtin-mods.txt).
+    mods = builtin_mods()
+    if mods:
+        built = build_with_mods(mods, args.profile, args.abi, sdk)
+    else:
+        build_apk.build_library(args.profile, ndk, sdk, args.abi)
+        profile_dir = "debug" if args.profile == "dev" else args.profile
+        built = SOURCE / "target" / triple / profile_dir / f"lib{build_apk.LIBRARY}.so"
     if not built.is_file():
         sys.exit(f"build_engine: {built} not built")
 
@@ -220,8 +281,11 @@ def main():
     libs = PREBUILT / "jniLibs" / args.abi
     shutil.rmtree(libs, ignore_errors=True)
     libs.mkdir(parents=True)
-    run(build_apk.ndk_tool(ndk, "llvm-strip"), "--strip-unneeded",
-        "-o", libs / f"lib{build_apk.LIBRARY}.so", built)
+    if mods:
+        shutil.copyfile(built, libs / f"lib{build_apk.LIBRARY}.so")  # stripped by native_build.sh
+    else:
+        run(build_apk.ndk_tool(ndk, "llvm-strip"), "--strip-unneeded",
+            "-o", libs / f"lib{build_apk.LIBRARY}.so", built)
     for name, path in sorted(launchers.items()):
         if name == "libc++_shared.so":
             continue  # the launcher's own (see the top of this file)
@@ -235,6 +299,7 @@ def main():
         "repository": pins["repository"],
         "commit": pins["commit"],
         "patches": patches,
+        "mods": mods,
         "profile": args.profile,
         "abi": args.abi,
     }, indent=2) + "\n", encoding="utf-8")
