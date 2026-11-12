@@ -3,12 +3,13 @@
 
     native_mods.py REQUEST OUT
 
-REQUEST is what the game writes in a request: mod ids, each optionally with a version
+REQUEST is a list of mod ids, each optionally with a version
 (`zoom@1.2.0 minimap`), separated by spaces, commas or new lines. Each must be a native mod
 (`kind = "native-mod"`) of the registry that is not taken down; its `.hnmod` is downloaded from
 the registry's release, checked against the SHA-256 the registry records, and unpacked. OUT gets
 one folder per mod (its horizon-mixins bundle) and `bundles.txt`, their paths in order, which
-.github/workflows/native-mods.yml hands to the engine's native_build.sh.
+build_engine.py hands to the engine's native_build.sh. Rust Client's own changes to a mod
+(mod_tweaks.py) are made after its download was checked.
 
 Nothing a requester writes is executed or used as a path: an id must match ID and be an entry
 of the registry.
@@ -24,6 +25,8 @@ import tomllib
 import urllib.request
 import zipfile
 
+import mod_tweaks
+
 REGISTRY = "https://github.com/horizon-rust/horizon-mods"
 ID = re.compile(r"[a-z0-9][a-z0-9_-]{0,40}")
 VERSION = re.compile(r"[0-9A-Za-z][0-9A-Za-z.+_-]{0,40}")
@@ -32,6 +35,7 @@ LARGEST = 64 * 1024 * 1024
 
 
 def fail(text):
+    print(f"::error::native_mods: {text}")
     sys.exit(f"native_mods: {text}")
 
 
@@ -110,7 +114,9 @@ def main():
                 fail(f"{name} is too big")
             if hashlib.sha256(data).hexdigest() != version["sha256"]:
                 fail(f"{name}'s download does not match the registry's SHA-256")
-            bundles.append(unpack(data, name, out))
+            bundle = unpack(data, name, out)
+            mod_tweaks.apply(name, bundle)
+            bundles.append(bundle)
     (out / "bundles.txt").write_text("".join(f"{b.resolve()}\n" for b in bundles))
 
 

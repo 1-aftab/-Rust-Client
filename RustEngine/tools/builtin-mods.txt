@@ -1,8 +1,7 @@
 # The mods compiled into the Rust Edition engine of every APK: one registry id a line, with the
 # version it is pinned to (https://github.com/horizon-rust/horizon-mods, mods/<id>.toml).
-# Each can be switched off in the game under Options > Mods. The mod compiler
-# (.github/workflows/native-mods.yml) adds these to every build it makes, so a requested build
-# keeps them. All are MIT or BSD-3-Clause; see RustEngine/NOTICE.md.
+# Each can be switched off in the game under Options > Mods. These are the only Rust Edition
+# mods: nothing is compiled for a player. All are MIT; see RustEngine/NOTICE.md.
 zoom@2.0.0
 minimap@2.0.0
 recipes@2.0.0

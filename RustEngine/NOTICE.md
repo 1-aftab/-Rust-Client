@@ -40,4 +40,5 @@ The engine of the APK is compiled with the mods listed in `tools/builtin-mods.tx
 build time from the mod registry https://github.com/horizon-rust/horizon-mods, where each
 mod's page names its authors, source and licence: Zoom, Minimap, Recipes, FPS Counter and
 Keystrokes (Horizon's official mods, MIT), AppleSkin (MIT), Eating Animation (MIT), Fullbright
-(MIT), Mouse Tricks (MIT) and HUD+ (MIT). They are unmodified.
+(MIT), Mouse Tricks (MIT) and HUD+ (MIT). They are unmodified, except that
+`tools/mod_tweaks.py` adds free placement to the FPS Counter, Keystrokes and the Minimap.

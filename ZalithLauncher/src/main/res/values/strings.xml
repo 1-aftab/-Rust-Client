@@ -2578,6 +2578,14 @@
     <string name="control_editor_exit_confirm">Exit Directly</string>
     <!-- Section title on the About page describing the launcher itself -->
     <string name="about_launcher_title">About Launcher</string>
+    <string name="about_rust_client_motto">Two engines. One launcher.</string>
+    <string name="about_rust_client_story">Rust Client runs the game two ways: the classic Java Edition with all its mods, and a Rust Edition rebuilt from the ground up on Vulkan for phones that want every frame they can get. Same controls on both, and a handful of mods already built in. Pick an engine and play.</string>
+    <string name="about_licences_title">Open-source licences</string>
+    <string name="about_licences_text">The projects Rust Client is built on, and their licences</string>
+    <string name="about_licences_zalith_text">Rust Client is a modified Zalith Launcher 2 (GPL-3.0)</string>
+    <string name="about_licences_engine_text">The Rust Edition engine, patched for Rust Client</string>
+    <string name="about_licences_mods_title">Built-in Rust Edition mods</string>
+    <string name="about_licences_mods_text">Zoom, Minimap, Recipes, FPS Counter, Keystrokes, AppleSkin, Eating Animation, Fullbright, Mouse Tricks and HUD+, by their authors (MIT)</string>
     <!-- Line under the launcher name on the About page; %s is the version number -->
     <string name="about_launcher_version">Launcher Version: %s</string>
     <!-- Name of the launcher author shown as an item title on the About page -->

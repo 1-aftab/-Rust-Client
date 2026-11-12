@@ -1,0 +1,65 @@
+diff --git a/crates/horizon-client/src/extras_hud.rs b/crates/horizon-client/src/extras_hud.rs
+index cc26e15..75d3c74 100644
+--- a/crates/horizon-client/src/extras_hud.rs
++++ b/crates/horizon-client/src/extras_hud.rs
+@@ -29,2 +29,10 @@ impl Corners {
+     /// above) what the corner already holds.
++    /// Rust Client: what each corner holds, to give back with `set_used` when a box that
++    /// took its place there was moved away (`place_free`).
++    pub fn used(&self) -> [f32; 4] {
++        self.used
++    }
++    pub fn set_used(&mut self, used: [f32; 4]) {
++        self.used = used;
++    }
+     pub fn place(&mut self, corner: Corner, w: f32, h: f32) -> (f32, f32) {
+@@ -47,2 +55,35 @@ impl Corners {
+ 
++thread_local! {
++    /// Rust Client: where the minimap's mod wants it instead of its corner, as fractions of
++    /// the way across and down the screen (None: its corner).
++    pub static MINIMAP_AT: std::cell::Cell<Option<(f32, f32)>> = const { std::cell::Cell::new(None) };
++}
++
++/// Rust Client: moves what `batch` got since `start` (a mod's box, drawn in its corner) so
++/// that it lies `across` and `down` of the way over the screen (0 to 1, the box kept whole
++/// on screen): a HUD box placed freely, whatever drew it.
++pub fn place_free(batch: &mut HudBatch, corners: &Corners, start: usize, across: f32, down: f32) {
++    let Some(drawn) = batch.vertices.get(start..) else {
++        return;
++    };
++    if drawn.is_empty() {
++        return;
++    }
++    let (mut x0, mut y0) = (f32::INFINITY, f32::INFINITY);
++    let (mut x1, mut y1) = (f32::NEG_INFINITY, f32::NEG_INFINITY);
++    for v in drawn {
++        x0 = x0.min(v.pos[0]);
++        y0 = y0.min(v.pos[1]);
++        x1 = x1.max(v.pos[0]);
++        y1 = y1.max(v.pos[1]);
++    }
++    let x = (corners.width - (x1 - x0)).max(0.0) * across.clamp(0.0, 1.0);
++    let y = (corners.height - (y1 - y0)).max(0.0) * down.clamp(0.0, 1.0);
++    let (dx, dy) = ((x - x0).round(), (y - y0).round());
++    for v in &mut batch.vertices[start..] {
++        v.pos[0] += dx;
++        v.pos[1] += dy;
++    }
++}
++
+ /// How the minimap shows: its corner and side in GUI pixels, its image (an
+diff --git a/crates/horizon-client/src/game/extras.rs b/crates/horizon-client/src/game/extras.rs
+index 259b1d1..8ae239f 100644
+--- a/crates/horizon-client/src/game/extras.rs
++++ b/crates/horizon-client/src/game/extras.rs
+@@ -259,3 +259,9 @@ impl Game<'_> {
+             };
++            // Rust Client: the minimap placed freely (its mod's settings), its corner given back.
++            let (start, held) = (batch.vertices.len(), corners.used());
+             extras_hud::draw_minimap(batch, atlas, &mut corners, &look);
++            if let Some((across, down)) = extras_hud::MINIMAP_AT.with(|at| at.get()) {
++                extras_hud::place_free(batch, &corners, start, across, down);
++                corners.set_used(held);
++            }
+         }
