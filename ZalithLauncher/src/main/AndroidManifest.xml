@@ -124,6 +124,14 @@
             android:screenOrientation="sensorLandscape" />
         <!-- Rust Client: the Rust Edition. The engine is a NativeActivity (Vulkan, no JVM game)
              and runs in a process of its own, apart from the Java Edition's ":game". -->
+        <!-- Rust Client: the control layout editor over the running Rust Edition (translucent,
+             in the game's process; no orientation of its own, it follows the game's). -->
+        <activity
+            android:name=".game.rust.RustControlEditorActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation"
+            android:exported="false"
+            android:process=":rust"
+            android:theme="@style/AppTheme.ZalithLauncher.OverGame" />
         <activity
             android:name=".game.rust.RustGameActivity"
             android:configChanges="mcc|mnc|locale|touchscreen|keyboard|keyboardHidden|navigation|screenLayout|fontScale|uiMode|orientation|density|screenSize|smallestScreenSize|layoutDirection|colorMode|fontWeightAdjustment|grammaticalGender"
@@ -140,6 +148,15 @@
                 android:name="android.app.func_name"
                 android:value="starling_on_create" />
         </activity>
+        <!-- Rust Client: the launcher's download screen of the Rust Edition. A process of its
+             own, which ends with the screen (see RustSetupActivity). -->
+        <activity
+            android:name=".game.rust.RustSetupActivity"
+            android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation|uiMode|density|fontScale"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:process=":rustsetup"
+            android:screenOrientation="sensorLandscape" />
         <activity android:name=".ui.activities.ErrorActivity"
             android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize|screenLayout|keyboard|navigation"
             android:screenOrientation="sensorLandscape" />

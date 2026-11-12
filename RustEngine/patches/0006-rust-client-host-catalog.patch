@@ -1,0 +1,343 @@
+diff --git a/crates/horizon-client/src/android.rs b/crates/horizon-client/src/android.rs
+index 6cc83aa..c2e49d6 100644
+--- a/crates/horizon-client/src/android.rs
++++ b/crates/horizon-client/src/android.rs
+@@ -1475,6 +1475,200 @@ pub fn open_recovery() {
+ /// (accounts.rs) and the same preparer (preparer.rs) the game's set-up screen runs, in a process
+ /// that has no activity of the engine's: what the platform hooks would ask the activity for
+ /// comes from the host instead.
++/// Rust Client: the mod catalog as the host launcher's own screen. The game asks the host to
++/// show it ([`open`]); the host's screen searches, installs and removes through the functions
++/// here (`EngineCatalog.java`), on its own threads; the game hears of what changed
++/// ([`take_changes`]) and tidies the pages that list it.
++pub mod host_catalog {
++    use starling_catalog::{
++        Done, Shelf,
++        browser::{Project, installed::Entry},
++    };
++    use std::path::PathBuf;
++    use std::sync::{Mutex, MutexGuard};
++
++    /// What the host's screen did to the game folder.
++    pub enum Change {
++        Installed(Done),
++        Removed(Entry),
++    }
++
++    struct State {
++        home: Option<PathBuf>,
++        /// The projects the searches found; the host names one by its place here.
++        rows: Vec<Project>,
++        changes: Vec<Change>,
++        line: String,
++        fraction: f32,
++    }
++
++    static STATE: Mutex<State> = Mutex::new(State {
++        home: None,
++        rows: Vec::new(),
++        changes: Vec::new(),
++        line: String::new(),
++        fraction: 0.0,
++    });
++
++    fn state() -> MutexGuard<'static, State> {
++        STATE.lock().unwrap_or_else(|e| e.into_inner())
++    }
++
++    fn failed(why: &str) -> String {
++        serde_json::json!({ "error": why }).to_string()
++    }
++
++    /// Asks the host to show its catalog on `shelf`, for the game folder `home`. False when
++    /// the host has none: the game then shows its own.
++    pub fn open(home: PathBuf, shelf: Shelf) -> bool {
++        starling_catalog::set_game_home(home.clone());
++        state().home = Some(home);
++        let shelf = match shelf {
++            Shelf::Mods => 0,
++            Shelf::ResourcePacks => 1,
++            Shelf::ShaderPacks => 2,
++        };
++        super::with_activity(|env, activity| {
++            env.call_method(
++                activity,
++                "openCatalog",
++                "(I)Z",
++                &[jni::objects::JValue::Int(shelf)],
++            )?
++            .z()
++        })
++        .unwrap_or(false)
++    }
++
++    /// One page of a shelf as JSON: `rows` (each with its `handle`) and `more`, or `error`.
++    pub fn search(shelf: i32, text: &str, everything: bool, offset: usize) -> String {
++        let shelf = match shelf {
++            1 => Shelf::ResourcePacks,
++            2 => Shelf::ShaderPacks,
++            _ => Shelf::Mods,
++        };
++        let page = starling_catalog::list::PAGE;
++        let found = match starling_catalog::search(shelf, text, everything, offset, page) {
++            Ok(found) => found,
++            Err(e) => return failed(&e),
++        };
++        let home = state().home.clone();
++        let installed = home
++            .as_deref()
++            .map(starling_catalog::installed_projects)
++            .unwrap_or_default();
++        let more = found.len() >= page;
++        let mut state = state();
++        if offset == 0 && state.rows.len() > 4096 {
++            state.rows.clear();
++        }
++        let rows: Vec<serde_json::Value> = found
++            .into_iter()
++            .map(|project| {
++                let row = serde_json::json!({
++                    "handle": state.rows.len(),
++                    "id": project.id,
++                    "title": project.title,
++                    "summary": project.summary,
++                    "author": project.author,
++                    "downloads": project.downloads,
++                    "icon": project.icon,
++                    "page": project.page,
++                    "source": match project.source {
++                        starling_catalog::browser::SourceId::Modrinth => "modrinth",
++                        starling_catalog::browser::SourceId::CurseForge => "curseforge",
++                        starling_catalog::browser::SourceId::Horizon => "registry",
++                    },
++                    "installed": installed.contains(&project.id),
++                    "native": starling_catalog::is_native_mod(&project),
++                    "caution": starling_catalog::caution(&project),
++                });
++                state.rows.push(project);
++                row
++            })
++            .collect();
++        serde_json::json!({ "rows": rows, "more": more }).to_string()
++    }
++
++    /// The ids of the projects installed now, as a JSON list.
++    pub fn installed() -> String {
++        let home = state().home.clone();
++        let ids: Vec<String> = home
++            .as_deref()
++            .map(starling_catalog::installed_projects)
++            .unwrap_or_default()
++            .into_iter()
++            .collect();
++        serde_json::json!(ids).to_string()
++    }
++
++    /// Installs the project a search named `handle`; returns when it is done. JSON: `done`
++    /// (what kind of thing went in) or `error`.
++    pub fn install(handle: usize, everything: bool) -> String {
++        let (project, home) = {
++            let mut state = state();
++            state.line.clear();
++            state.fraction = 0.0;
++            (state.rows.get(handle).cloned(), state.home.clone())
++        };
++        let (Some(project), Some(home)) = (project, home) else {
++            return failed("That project is no longer listed: search again.");
++        };
++        let progress = |line: &str, fraction: f32| {
++            let mut state = state();
++            line.clone_into(&mut state.line);
++            state.fraction = fraction;
++        };
++        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
++            starling_catalog::install(&project, everything, &home, &progress)
++        }))
++        .unwrap_or_else(|_| Err(format!("Installing {} stopped.", project.title)));
++        match result {
++            Ok(done) => {
++                let kind = match done {
++                    Done::NativeMod => "native-mod",
++                    Done::ContentMod => "content-mod",
++                    Done::ResourcePack => "resource-pack",
++                    Done::ShaderPack => "shader-pack",
++                };
++                state().changes.push(Change::Installed(done));
++                serde_json::json!({ "done": kind }).to_string()
++            }
++            Err(e) => failed(&e),
++        }
++    }
++
++    /// How far the install is: the fraction done, a tab, and its line.
++    pub fn progress() -> String {
++        let state = state();
++        format!("{}\t{}", state.fraction, state.line)
++    }
++
++    /// Removes what was installed for the project a search named `handle`. JSON: empty, or
++    /// `error`.
++    pub fn remove(handle: usize) -> String {
++        let (project, home) = {
++            let state = state();
++            (state.rows.get(handle).cloned(), state.home.clone())
++        };
++        let (Some(project), Some(home)) = (project, home) else {
++            return failed("That project is no longer listed: search again.");
++        };
++        match starling_catalog::remove(&home, &project) {
++            Ok(entry) => {
++                state().changes.push(Change::Removed(entry));
++                "{}".to_owned()
++            }
++            Err(e) => failed(&e),
++        }
++    }
++
++    /// What the host's screen changed since the game last asked.
++    pub fn take_changes() -> Vec<Change> {
++        std::mem::take(&mut state().changes)
++    }
++}
++
+ pub mod host_setup {
+     use crate::accounts::Files;
+     use crate::preparer::Stage;
+diff --git a/crates/horizon-client/src/android_lib.rs b/crates/horizon-client/src/android_lib.rs
+index 1e900aa..4865371 100644
+--- a/crates/horizon-client/src/android_lib.rs
++++ b/crates/horizon-client/src/android_lib.rs
+@@ -298,6 +298,76 @@ extern "system" fn Java_io_github_juanluci_starling_EngineSetup_nativeCancel(
+     horizon_client::android::host_setup::cancel();
+ }
+ 
++/// Rust Client: `EngineCatalog.nativeSearch`: one page of a shelf of the mod catalog, as JSON.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_EngineCatalog_nativeSearch(
++    mut env: jni::JNIEnv,
++    _class: jni::objects::JClass,
++    shelf: i32,
++    text: jni::objects::JString,
++    everything: u8,
++    offset: i32,
++) -> jni::sys::jstring {
++    let text = if text.is_null() {
++        String::new()
++    } else {
++        env.get_string(&text).map(String::from).unwrap_or_default()
++    };
++    let found = horizon_client::android::host_catalog::search(
++        shelf,
++        &text,
++        everything != 0,
++        offset.max(0) as usize,
++    );
++    env.new_string(found)
++        .map_or(std::ptr::null_mut(), |text| text.into_raw())
++}
++
++/// Rust Client: `EngineCatalog.nativeInstalled`: the installed projects' ids, as a JSON list.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_EngineCatalog_nativeInstalled(
++    env: jni::JNIEnv,
++    _class: jni::objects::JClass,
++) -> jni::sys::jstring {
++    env.new_string(horizon_client::android::host_catalog::installed())
++        .map_or(std::ptr::null_mut(), |text| text.into_raw())
++}
++
++/// Rust Client: `EngineCatalog.nativeInstall`: installs a found project; returns when done.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_EngineCatalog_nativeInstall(
++    env: jni::JNIEnv,
++    _class: jni::objects::JClass,
++    handle: i32,
++    everything: u8,
++) -> jni::sys::jstring {
++    let done =
++        horizon_client::android::host_catalog::install(handle.max(0) as usize, everything != 0);
++    env.new_string(done)
++        .map_or(std::ptr::null_mut(), |text| text.into_raw())
++}
++
++/// Rust Client: `EngineCatalog.nativeProgress`: how far the install is.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_EngineCatalog_nativeProgress(
++    env: jni::JNIEnv,
++    _class: jni::objects::JClass,
++) -> jni::sys::jstring {
++    env.new_string(horizon_client::android::host_catalog::progress())
++        .map_or(std::ptr::null_mut(), |text| text.into_raw())
++}
++
++/// Rust Client: `EngineCatalog.nativeRemove`: removes what was installed for a found project.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_EngineCatalog_nativeRemove(
++    env: jni::JNIEnv,
++    _class: jni::objects::JClass,
++    handle: i32,
++) -> jni::sys::jstring {
++    env.new_string(horizon_client::android::host_catalog::remove(handle.max(0) as usize))
++        .map_or(std::ptr::null_mut(), |text| text.into_raw())
++}
++
+ /// Rust Client: `EngineSetup.nativeStatus`.
+ #[unsafe(no_mangle)]
+ extern "system" fn Java_io_github_juanluci_starling_EngineSetup_nativeStatus(
+diff --git a/crates/horizon-client/src/game/mod_catalog.rs b/crates/horizon-client/src/game/mod_catalog.rs
+index 3f4bef2..e0a5bed 100644
+--- a/crates/horizon-client/src/game/mod_catalog.rs
++++ b/crates/horizon-client/src/game/mod_catalog.rs
+@@ -558,6 +558,12 @@ fn draw_foot(
+ impl Game<'_> {
+     /// A page's Catalog button: the screen, on that page's shelf.
+     pub(super) fn open_catalog_on(&mut self, shelf: Shelf) {
++        // Rust Client: the host launcher shows the catalog as a screen of its own.
++        if crate::android::external_controls()
++            && crate::android::host_catalog::open(Self::game_dir(), shelf)
++        {
++            return;
++        }
+         self.catalog.shelf = shelf;
+         self.open_catalog();
+     }
+@@ -794,6 +800,15 @@ impl Game<'_> {
+     /// What came since the last frame: a pause in the typing, the keyboard put away, an install
+     /// that ended (it goes on with the screen closed).
+     pub(super) fn poll_catalog(&mut self) {
++        // Rust Client: what the host's catalog installed and removed.
++        for change in crate::android::host_catalog::take_changes() {
++            match change {
++                crate::android::host_catalog::Change::Installed(done) => {
++                    self.host_catalog_installed(done)
++                }
++                crate::android::host_catalog::Change::Removed(entry) => self.after_removal(&entry),
++            }
++        }
+         if self.catalog.typing && self.keyboard_put_away("catalog") {
+             self.catalog.typing = false;
+         }
+@@ -848,6 +863,23 @@ impl Game<'_> {
+         });
+     }
+ 
++    /// Rust Client: the pages that list what the host's catalog put in list it now.
++    fn host_catalog_installed(&mut self, done: Done) {
++        match done {
++            Done::NativeMod => self.list_new_native_mods(),
++            Done::ShaderPack => {
++                self.settings.shader_packs =
++                    horizon_client::shader_pack_list::scan(&Self::shader_packs_dir());
++            }
++            Done::ResourcePack => {
++                let infos =
++                    super::packs::pack_infos(&self.vanilla_root(), &self.server_packs.active);
++                self.ui.options.update_pack_infos(infos);
++            }
++            Done::ContentMod => self.refresh_mods_page(None),
++        }
++    }
++
+     fn catalog_install(&mut self, index: usize) {
+         let card = &mut self.catalog;
+         let shared = card.shared.clone();

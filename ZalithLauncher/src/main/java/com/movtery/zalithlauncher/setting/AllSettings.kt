@@ -197,6 +197,12 @@ object AllSettings : SettingsRegistry() {
     val hideMouse = boolSetting("hideMouse", false)
 
     /**
+     * Rust Edition: the game's screens are touched where the finger is, with no mouse pointer;
+     * off, the screen is a touchpad that moves the pointer
+     */
+    val rustTouchScreen = boolSetting("rustTouchScreen", true)
+
+    /**
      * 虚拟鼠标大小（Dp）
      */
     val mouseSize = intSetting("mouseSize", 24, 5..50)
@@ -435,7 +441,7 @@ object AllSettings : SettingsRegistry() {
     /**
      * 主界面操作菜单的停泊侧
      */
-    val launcherActionMenuSide = enumSetting("launcherActionMenuSide", ActionMenuSide.END)
+    val launcherActionMenuSide = enumSetting("launcherActionMenuSide", ActionMenuSide.START)
 
     /**
      * 启动器背景元素不透明度

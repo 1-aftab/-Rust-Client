@@ -1,0 +1,220 @@
+diff --git a/crates/horizon-client/src/android.rs b/crates/horizon-client/src/android.rs
+index ced129b..3eb6826 100644
+--- a/crates/horizon-client/src/android.rs
++++ b/crates/horizon-client/src/android.rs
+@@ -844,6 +844,8 @@ mod input {
+     /// The host's controls are in use: the game keeps to the keyboard and mouse while a world
+     /// is played, so its own touch controls stay away.
+     static EXTERNAL_CONTROLS: AtomicBool = AtomicBool::new(false);
++    /// The host asked for the on-screen keyboard since the game last looked.
++    static EXTERNAL_KEYBOARD: AtomicBool = AtomicBool::new(false);
+     /// The keys the host's controls pressed and released since the game last asked.
+     static EXTERNAL_KEYS: Mutex<Vec<ExternalKey>> = Mutex::new(Vec::new());
+ 
+@@ -863,6 +865,16 @@ mod input {
+         EXTERNAL_CONTROLS.load(Ordering::Relaxed)
+     }
+ 
++    /// The host's keyboard button: the game shows the on-screen keyboard on its next frame.
++    pub fn request_external_keyboard() {
++        EXTERNAL_KEYBOARD.store(true, Ordering::Relaxed);
++    }
++
++    /// Whether the host asked for the on-screen keyboard since the last call.
++    pub fn take_external_keyboard() -> bool {
++        EXTERNAL_KEYBOARD.swap(false, Ordering::Relaxed)
++    }
++
+     /// Whether the game reads the mouse yet: before, the host's events would be lost.
+     pub fn external_ready() -> bool {
+         MOUSE.lock().unwrap_or_else(|e| e.into_inner()).taken
+@@ -893,7 +905,7 @@ mod input {
+ pub use input::{MouseEvent, keyboard_used, pad_state, take_mouse_events};
+ pub use input::{
+     ExternalKey, external_controls, external_ready, push_external_key, push_external_mouse,
+-    set_external_controls, take_external_keys,
++    request_external_keyboard, set_external_controls, take_external_keyboard, take_external_keys,
+ };
+ 
+ /// Android took the captured pointer back while the game held it (StarlingActivity).
+diff --git a/crates/horizon-client/src/android_lib.rs b/crates/horizon-client/src/android_lib.rs
+index 1a46839..bf9cd8e 100644
+--- a/crates/horizon-client/src/android_lib.rs
++++ b/crates/horizon-client/src/android_lib.rs
+@@ -109,6 +109,16 @@ extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_nativeExter
+     horizon_client::android::set_external_controls(on != 0);
+ }
+ 
++/// Rust Client: `StarlingActivity.nativeExternalKeyboard`. The keyboard button of the host
++/// launcher's controls: the on-screen keyboard shows for the text field in use.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_nativeExternalKeyboard(
++    _env: *mut std::ffi::c_void,
++    _class: *mut std::ffi::c_void,
++) {
++    horizon_client::android::request_external_keyboard();
++}
++
+ /// Rust Client: `StarlingActivity.nativeExternalReady`. Whether the game reads the host's events
+ /// yet (it does from its first loop iteration; the start-up screens before it do not).
+ #[unsafe(no_mangle)]
+diff --git a/crates/horizon-client/src/game/input_mode.rs b/crates/horizon-client/src/game/input_mode.rs
+index 648a617..919a13e 100644
+--- a/crates/horizon-client/src/game/input_mode.rs
++++ b/crates/horizon-client/src/game/input_mode.rs
+@@ -66,6 +66,9 @@ impl Game<'_> {
+                 }
+             }
+             self.external_key_frame(event_loop);
++            if crate::android::take_external_keyboard() {
++                self.touch_request_keyboard();
++            }
+         }
+         let events = crate::android::take_mouse_events();
+         if events.is_empty() {
+@@ -77,6 +80,11 @@ impl Game<'_> {
+         };
+         let device_id = DeviceId::dummy();
+         for event in events {
++            // Rust Client: the screens made for a finger (the catalog, the cards over the title)
++            // read touches only: there the host's pointer is the finger.
++            if crate::android::external_controls() && self.external_finger(&event) {
++                continue;
++            }
+             let event = match event {
+                 crate::android::MouseEvent::Moved(x, y) => WindowEvent::CursorMoved {
+                     device_id,
+@@ -105,6 +113,51 @@ impl Game<'_> {
+         }
+     }
+ 
++    /// Rust Client: the host's pointer as a finger on the screens that read touches only. True
++    /// when one of them took the event, which then goes no further.
++    #[cfg(target_os = "android")]
++    fn external_finger(&mut self, event: &crate::android::MouseEvent) -> bool {
++        use crate::android::MouseEvent;
++        use std::sync::Mutex;
++        use winit::event::MouseButton;
++        /// Where the host's pointer is, and whether its button is held on one of those screens.
++        static POINTER: Mutex<((f64, f64), bool)> = Mutex::new(((0.0, 0.0), false));
++        let (phase, at) = {
++            let mut pointer = POINTER.lock().unwrap_or_else(|e| e.into_inner());
++            match *event {
++                MouseEvent::Moved(x, y) => {
++                    pointer.0 = (x, y);
++                    if !pointer.1 {
++                        return false;
++                    }
++                    (TouchPhase::Moved, pointer.0)
++                }
++                MouseEvent::Button(MouseButton::Left, true) => (TouchPhase::Started, pointer.0),
++                MouseEvent::Button(MouseButton::Left, false) if pointer.1 => {
++                    pointer.1 = false;
++                    (TouchPhase::Ended, pointer.0)
++                }
++                _ => return false,
++            }
++        };
++        let touch = winit::event::Touch {
++            device_id: DeviceId::dummy(),
++            phase,
++            location: PhysicalPosition::new(at.0, at.1),
++            force: None,
++            id: u64::MAX - 1,
++        };
++        let taken = self.files_offer_touch(&touch)
++            || self.update_offer_touch(&touch)
++            || self.native_builds_touch(&touch)
++            || self.catalog_touch(&touch);
++        if phase == TouchPhase::Started && taken {
++            POINTER.lock().unwrap_or_else(|e| e.into_inner()).1 = true;
++        }
++        // The lift of a press one of them took is theirs too, even if it closed the screen.
++        taken || phase == TouchPhase::Ended
++    }
++
+     /// Rust Client: the keys the host launcher's on-screen controls pressed and released since
+     /// the last iteration, as the window events a keyboard's keys make.
+     #[cfg(target_os = "android")]
+diff --git a/crates/horizon-client/src/game/touch.rs b/crates/horizon-client/src/game/touch.rs
+index 28c4366..1e98fb6 100644
+--- a/crates/horizon-client/src/game/touch.rs
++++ b/crates/horizon-client/src/game/touch.rs
+@@ -989,7 +989,12 @@ impl Game<'_> {
+                 self.touch.ime_seen = false;
+             }
+         }
+-        let keyboard = self.touch_shown() && self.touch.wanted && self.focused;
++        // Rust Client: the host's controls type with the on-screen keyboard too.
++        #[cfg(target_os = "android")]
++        let typing = self.touch_shown() || crate::android::external_controls();
++        #[cfg(not(target_os = "android"))]
++        let typing = self.touch_shown();
++        let keyboard = typing && self.touch.wanted && self.focused;
+         // On Android the keyboard's editor shows it (text_mirror.rs).
+         #[cfg(target_os = "android")]
+         if self.window.is_some() {
+diff --git a/crates/horizon-client/src/game/update_offer.rs b/crates/horizon-client/src/game/update_offer.rs
+index 305a12c..ac7ae24 100644
+--- a/crates/horizon-client/src/game/update_offer.rs
++++ b/crates/horizon-client/src/game/update_offer.rs
+@@ -172,6 +172,10 @@ impl Game<'_> {
+         let offer = &mut self.update_offer;
+         if !offer.started {
+             offer.started = true;
++            // Rust Client: the host launcher is what gets updated, by its own means.
++            if crate::android::external_controls() {
++                return;
++            }
+             // An update installed, or one left: the APK goes.
+             let _ = std::fs::remove_dir_all(updates());
+             let test = std::env::var("STARLING_UPDATE_TEST")
+diff --git a/crates/horizon-theme/src/lib.rs b/crates/horizon-theme/src/lib.rs
+index f15bf05..a45ff57 100644
+--- a/crates/horizon-theme/src/lib.rs
++++ b/crates/horizon-theme/src/lib.rs
+@@ -256,8 +256,8 @@ pub const MEASURE: f32 = 56.;
+ 
+ /// Corner radii: fields and small controls; plates (hover rows, console, dialogs); pills
+ /// (buttons, segmented controls, switches).
+-pub const RADIUS: f32 = 8.;
+-pub const RADIUS_PLATE: f32 = 12.;
++pub const RADIUS: f32 = 12.;
++pub const RADIUS_PLATE: f32 = 16.;
+ pub const RADIUS_PILL: f32 = 999.;
+ /// Rules between rows are one pixel; there are no other borders.
+ pub const RULE: f32 = 1.;
+@@ -397,19 +397,21 @@ pub const LIGHT: Palette = Palette {
+     dark: false,
+ };
+ 
++// Rust Client: the host launcher's dark colour scheme, so the game's own screens (the mod
++// catalog, the cards over the title) are the launcher's.
+ pub const DARK: Palette = Palette {
+-    page: 0x0d0e13,
+-    plate_soft: 0x181a22,
+-    plate: 0x20222c,
+-    surface: 0x16181f,
+-    rule: 0x24262f,
+-    ink: 0xecedf3,
+-    ink_soft: 0xc5c7d1,
+-    muted: 0x8b8f9c,
+-    accent: 0x9a86ff,
+-    on_accent: 0x0d0e13,
+-    danger: 0xf07a68,
+-    success: 0x45c27a,
++    page: 0x1c110e,
++    plate_soft: 0x241916,
++    plate: 0x342723,
++    surface: 0x291d19,
++    rule: 0x58423b,
++    ink: 0xf4ded8,
++    ink_soft: 0xdfc0b7,
++    muted: 0xa78b83,
++    accent: 0xffb59f,
++    on_accent: 0x5f1600,
++    danger: 0xffb4ab,
++    success: 0x8ed88e,
+     dark: true,
+ };
+ 

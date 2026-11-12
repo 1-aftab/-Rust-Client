@@ -148,6 +148,21 @@ public class StarlingActivity extends NativeActivity {
     /** An Android key code, and the Unicode code point it types (0: none). */
     public static native void nativeExternalKey(int keycode, boolean pressed, int character);
 
+    /** Rust Client: a finger on the host's window over the game's, as a touch on the game's. */
+    public static native void nativeExternalTouch(int finger, int phase, float x, float y);
+
+    /** Rust Client: the host's keyboard button: shows the on-screen keyboard. */
+    public static native void nativeExternalKeyboard();
+
+    /**
+     * Rust Client: the game asks for the mod catalog (EngineCatalog's shelf numbers), from its
+     * own thread. A host that shows the catalog as a screen of its own does so and answers true;
+     * false keeps the game's.
+     */
+    public boolean openCatalog(int shelf) {
+        return false;
+    }
+
     /** The game holds the pointer (capturePointer); on the UI thread only. */
     private boolean pointerWanted;
 
@@ -626,7 +641,7 @@ public class StarlingActivity extends NativeActivity {
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         message.setSpan(new StyleSpan(Typeface.BOLD), 0, warning.length(),
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        message.append("\n\nThe game another server sends back runs inside Starling with full "
+        message.append("\n\nThe game another server sends back runs inside Rust Client with full "
                 + "access, including your worlds and your signed-in account. Only use a server you "
                 + "run yourself or fully trust. Your native mods are the only files sent to it.");
 
@@ -647,7 +662,7 @@ public class StarlingActivity extends NativeActivity {
                         }
                     }
                 })
-                .setNeutralButton("Use Starling's", new DialogInterface.OnClickListener() {
+                .setNeutralButton("Use Rust Client's", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         NativeMods.chooseBuildServer(StarlingActivity.this, null);
@@ -886,7 +901,7 @@ public class StarlingActivity extends NativeActivity {
         if (clipboard == null) {
             return false;
         }
-        clipboard.setPrimaryClip(ClipData.newPlainText("Starling", text));
+        clipboard.setPrimaryClip(ClipData.newPlainText("Rust Client", text));
         return true;
     }
 

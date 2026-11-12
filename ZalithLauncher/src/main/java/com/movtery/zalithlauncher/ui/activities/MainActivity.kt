@@ -233,7 +233,8 @@ class MainActivity : BaseAppCompatActivity() {
 
         //拉取当月赞助者数据
         lifecycleScope.launch {
-            sponsorsViewModel.loadOnStart(
+            //Rust Client: the sponsor list is the upstream project's; it is not fetched or shown
+            if (false) sponsorsViewModel.loadOnStart(
                 showLastMonth = GuideProgress.isPlayed(GuideKeys.Main) && !isImporting
             )
         }
@@ -272,7 +273,7 @@ class MainActivity : BaseAppCompatActivity() {
                         checkUpdate()
                     }
                     is EventViewModel.Event.ShowSponsors -> {
-                        sponsorsViewModel.openDialog()
+                        //Rust Client: no sponsor list
                     }
                     is EventViewModel.Event.KeepScreen -> {
                         keepScreen(event.on)
@@ -414,7 +415,7 @@ class MainActivity : BaseAppCompatActivity() {
                 }
 
                 //显示赞助支持的小弹窗
-                if (!isImporting && finishedGame.state >= 100 && showSponsorship.state) {
+                if (false && !isImporting && finishedGame.state >= 100 && showSponsorship.state) {
                     SimpleAlertDialog(
                         title = stringResource(R.string.about_sponsor),
                         text = stringResource(R.string.game_saponsorship_finished_game, finishedGame.state),

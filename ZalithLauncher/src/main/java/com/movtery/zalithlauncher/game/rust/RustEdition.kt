@@ -22,7 +22,10 @@ package com.movtery.zalithlauncher.game.rust
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import com.movtery.zalithlauncher.game.account.Account
+import com.movtery.zalithlauncher.game.account.wardrobe.SkinModelType
 import io.github.juanluci.starling.EngineHost
+import io.github.juanluci.starling.EngineSetup
 import java.io.File
 
 /**
@@ -45,7 +48,7 @@ object RustEdition {
     const val MINECRAFT_VERSION = "26.3"
 
     /** The engine the Rust Edition is built from */
-    const val ENGINE_NAME = "Starling"
+    const val ENGINE_NAME = "Rust"
 
     /** `VK_API_VERSION_1_3`, as `PackageManager.FEATURE_VULKAN_HARDWARE_VERSION` words it */
     private const val VULKAN_1_3 = 0x400003
@@ -60,6 +63,12 @@ object RustEdition {
     /** The engine's arguments file, read at each start (android.rs `command_line`) */
     private const val ARGS_FILE = "horizon-args.txt"
     private const val ARG_PLAYER_NAME = "HORIZON_PLAYER_NAME"
+    private const val ARG_HOST_ACCOUNTS = "RUST_CLIENT_HOST_ACCOUNTS"
+
+    /** The engine's player file and skins folder, beside its options */
+    private const val PLAYER_FILE = "horizon-player.txt"
+    private const val SKINS_FOLDER = "skins"
+    private const val LAUNCHER_SKIN = "launcher.png"
 
     /** Why the Rust Edition cannot be started, if it cannot */
     enum class Problem {
@@ -96,36 +105,73 @@ object RustEdition {
         File(gameFolder(context), name).apply { mkdirs() }
 
     /**
-     * Starts the Rust Edition.
-     * @param playerName the name to play with (the launcher's current account), or null to
-     * leave the choice to the engine
+     * Starts the Rust Edition as the launcher's current account.
+     *
+     * The launcher is the only place accounts and skins are managed: the engine is told so
+     * and shows no account or skin screens of its own. The account's name and skin are
+     * handed over here, at every start.
      */
-    fun launch(context: Context, playerName: String?) {
-        runCatching { writePlayerName(context, playerName) }
+    fun launch(context: Context, account: Account?) {
+        runCatching { writeArguments(context, account?.username) }
+        runCatching { writePlayer(context, account) }
         gameFolder(context).mkdirs()
-        val intent = Intent(context, RustGameActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // Game files not prepared yet: the launcher's own download screen first. The engine's
+        // window opens only once there is a game to show.
+        val intent = if (EngineSetup.prepared(context)) {
+            Intent(context, RustGameActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        } else {
+            RustSetupActivity.intent(context)
+        }
         context.startActivity(intent)
     }
 
     /**
-     * Hands the launcher's account name to the engine through its arguments file.
-     * Lines the player wrote there are kept; only the name line is replaced.
+     * The engine's arguments file: the player's name, and that the accounts are the
+     * launcher's. Lines the player wrote there are kept.
      */
-    private fun writePlayerName(context: Context, playerName: String?) {
+    private fun writeArguments(context: Context, playerName: String?) {
         val file = File(EngineHost.filesDir(context), ARGS_FILE)
+        val ours = listOf("$ARG_PLAYER_NAME=", "$ARG_HOST_ACCOUNTS=")
         val kept = if (file.isFile) {
-            file.readLines().filterNot { it.trim().startsWith("$ARG_PLAYER_NAME=") }
+            file.readLines().filterNot { line -> ours.any { line.trim().startsWith(it) } }
         } else {
             emptyList()
         }
-        val name = playerName?.takeIf { VALID_NAME.matches(it) }
-        val lines = if (name != null) kept + "$ARG_PLAYER_NAME=$name" else kept
-        if (lines.isEmpty()) {
-            file.delete()
+        val lines = kept.toMutableList()
+        lines += "$ARG_HOST_ACCOUNTS=1"
+        playerName?.takeIf { VALID_NAME.matches(it) }?.let { lines += "$ARG_PLAYER_NAME=$it" }
+        file.writeText(lines.joinToString(separator = "\n", postfix = "\n"))
+    }
+
+    /**
+     * The engine's player file in the game folder (`key:value` lines): the name worlds open
+     * with, and the skin the player wears, copied from the launcher's account.
+     */
+    private fun writePlayer(context: Context, account: Account?) {
+        val folder = gameFolder(context).apply { mkdirs() }
+        val skins = File(folder, SKINS_FOLDER).apply { mkdirs() }
+        val skin = File(skins, LAUNCHER_SKIN)
+        val source = account?.getSkinFile()?.takeIf { it.isFile }
+        if (source != null) {
+            source.copyTo(skin, overwrite = true)
         } else {
-            file.writeText(lines.joinToString(separator = "\n", postfix = "\n"))
+            skin.delete()
         }
+
+        val values = LinkedHashMap<String, String?>()
+        val name = account?.username?.takeIf { VALID_NAME.matches(it) }
+        if (name != null) {
+            values["name"] = name
+            values["chosen"] = "true"
+        }
+        values["skin"] = if (source != null) LAUNCHER_SKIN else null
+        values["model"] = if (account?.skinModelType == SkinModelType.ALEX) "slim" else "classic"
+
+        val file = File(folder, PLAYER_FILE)
+        val lines = if (file.isFile) file.readLines().toMutableList() else mutableListOf()
+        lines.removeAll { line -> values.keys.any { line.startsWith("$it:") } }
+        values.forEach { (key, value) -> if (value != null) lines += "$key:$value" }
+        file.writeText(lines.joinToString(separator = "\n", postfix = "\n"))
     }
 
     /** What Minecraft accepts as a player name */

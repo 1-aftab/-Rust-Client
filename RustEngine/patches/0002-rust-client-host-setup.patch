@@ -1,0 +1,225 @@
+diff --git a/crates/horizon-client/src/android.rs b/crates/horizon-client/src/android.rs
+index 6e69b7d..f494d4d 100644
+--- a/crates/horizon-client/src/android.rs
++++ b/crates/horizon-client/src/android.rs
+@@ -1442,3 +1442,161 @@ pub fn open_recovery() {
+             .map(drop)
+     });
+ }
++
++/// Rust Client: the game files fetched and prepared without the game, for the host launcher's
++/// own set-up screen (RustSetupActivity.kt, through EngineSetup.java). The same download
++/// (accounts.rs) and the same preparer (preparer.rs) the game's set-up screen runs, in a process
++/// that has no activity of the engine's: what the platform hooks would ask the activity for
++/// comes from the host instead.
++pub mod host_setup {
++    use crate::accounts::Files;
++    use crate::preparer::Stage;
++    use std::path::{Path, PathBuf};
++    use std::sync::OnceLock;
++    use std::sync::atomic::{AtomicBool, Ordering};
++
++    struct Host {
++        /// The folder the app's libraries are installed in.
++        library: PathBuf,
++        /// The APK's assets the preparer reads, copied out by the host.
++        assets: PathBuf,
++        /// The folder the game reads its resources from.
++        resources: PathBuf,
++    }
++
++    static HOST: OnceLock<Host> = OnceLock::new();
++    static RUNNING: AtomicBool = AtomicBool::new(false);
++
++    fn library_dir() -> Option<PathBuf> {
++        HOST.get().map(|host| host.library.clone())
++    }
++
++    fn asset(name: &str) -> Option<Vec<u8>> {
++        std::fs::read(HOST.get()?.assets.join(name)).ok()
++    }
++
++    fn open_folder(_: &Path) -> bool {
++        false
++    }
++
++    fn pick_file() -> bool {
++        false
++    }
++
++    fn clipboard_get() -> Option<String> {
++        None
++    }
++
++    fn clipboard_set(_: &str) -> bool {
++        false
++    }
++
++    fn open_link(_: &str) -> bool {
++        false
++    }
++
++    fn no_secret(_: &[u8]) -> Option<Vec<u8>> {
++        None
++    }
++
++    fn keep_working(_: &str, _: &str, _: bool) {}
++
++    /// Once a process, before anything else: where the engine's files are.
++    pub fn init(private: PathBuf, library: PathBuf, assets: PathBuf) {
++        if HOST.get().is_some() {
++            return;
++        }
++        let _ = std::fs::create_dir_all(&private);
++        // SAFETY: called once by the host before it starts any work of the engine's.
++        unsafe {
++            std::env::set_var("HORIZON_HOME", &private);
++            std::env::set_var("HORIZON_PRIVATE", &private);
++            std::env::set_var("HORIZON_TELEMETRY_URL", "off");
++            std::env::set_var("HORIZON_NO_DISCORD", "1");
++        }
++        super::logging::set_console(super::logcat);
++        crate::platform::set(crate::platform::Hooks {
++            open_folder,
++            pick_file,
++            clipboard_get,
++            clipboard_set,
++            open_link,
++            seal: no_secret,
++            open: no_secret,
++            library_dir,
++            asset,
++            keep_working,
++        });
++        let resources = private.join("resources");
++        let _ = HOST.set(Host {
++            library,
++            assets,
++            resources,
++        });
++    }
++
++    /// Fetch the official files, then prepare them into the game's resources. A second call
++    /// while it works does nothing; after a failure or a stop it takes up where that left.
++    pub fn start() {
++        let Some(host) = HOST.get() else {
++            return;
++        };
++        if RUNNING.swap(true, Ordering::SeqCst) {
++            return;
++        }
++        let spawned = std::thread::Builder::new()
++            .name("host-setup".into())
++            .spawn(move || {
++                if crate::accounts::files() != Files::Ready {
++                    crate::accounts::download_files();
++                }
++                loop {
++                    match crate::accounts::files() {
++                        Files::Ready => {
++                            crate::preparer::start(host.resources.clone());
++                            break;
++                        }
++                        Files::Checking | Files::Downloading(_) => {}
++                        Files::Missing | Files::Failed(_) => break,
++                    }
++                    std::thread::sleep(std::time::Duration::from_millis(250));
++                }
++                RUNNING.store(false, Ordering::SeqCst);
++            });
++        if spawned.is_err() {
++            RUNNING.store(false, Ordering::SeqCst);
++        }
++    }
++
++    /// Stop the download in progress; what it fetched stays for the next start.
++    pub fn cancel() {
++        crate::accounts::cancel_download();
++    }
++
++    /// Where the work is, as `stage \t done \t total \t text`: `idle`, `checking`, `download`
++    /// (bytes), `java` (bytes), `unpacking`, `preparing` (the preparer's last line), `done`,
++    /// `failed` (the reason).
++    pub fn status() -> String {
++        // While the files are fetched (again), what an earlier preparation left does not count.
++        let fetching = RUNNING.load(Ordering::SeqCst);
++        match crate::preparer::stage() {
++            Stage::Java(done, total) => return format!("java\t{done}\t{total}\t"),
++            Stage::Unpacking => return "unpacking\t0\t0\t".into(),
++            Stage::Preparing(line) => return format!("preparing\t0\t0\t{line}"),
++            Stage::Done if !fetching => return "done\t0\t0\t".into(),
++            Stage::Failed(error) if !fetching => return format!("failed\t0\t0\t{error}"),
++            Stage::Done | Stage::Failed(_) | Stage::Idle => {}
++        }
++        match crate::accounts::files() {
++            Files::Checking => "checking\t0\t0\t".into(),
++            Files::Downloading(p) => format!(
++                "download\t{}\t{}\t{}/{}",
++                p.bytes, p.bytes_total, p.files, p.files_total
++            ),
++            Files::Failed(error) => format!("failed\t0\t0\t{error}"),
++            // Fetched: the preparing is about to start.
++            Files::Ready if RUNNING.load(Ordering::SeqCst) => "checking\t0\t0\t".into(),
++            Files::Ready | Files::Missing => "idle\t0\t0\t".into(),
++        }
++    }
++}
+diff --git a/crates/horizon-client/src/android_lib.rs b/crates/horizon-client/src/android_lib.rs
+index a4420a4..1a46839 100644
+--- a/crates/horizon-client/src/android_lib.rs
++++ b/crates/horizon-client/src/android_lib.rs
+@@ -222,3 +222,54 @@ extern "system" fn Java_io_github_juanluci_starling_DiagnosticsActivity_makeRepo
+         }
+     }
+ }
++
++/// Rust Client: `EngineSetup.nativeInit`. The host launcher's set-up screen prepares the game
++/// files without the game (android.rs, `host_setup`): the engine's private folder, the folder of
++/// the app's libraries, and the folder the host copied the APK's assets to.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_EngineSetup_nativeInit(
++    mut env: jni::JNIEnv,
++    _class: jni::objects::JClass,
++    private: jni::objects::JString,
++    library: jni::objects::JString,
++    assets: jni::objects::JString,
++) {
++    let Ok(private) = env.get_string(&private).map(String::from) else {
++        return;
++    };
++    let Ok(library) = env.get_string(&library).map(String::from) else {
++        return;
++    };
++    let Ok(assets) = env.get_string(&assets).map(String::from) else {
++        return;
++    };
++    horizon_client::android::host_setup::init(private.into(), library.into(), assets.into());
++}
++
++/// Rust Client: `EngineSetup.nativeStart`.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_EngineSetup_nativeStart(
++    _env: *mut std::ffi::c_void,
++    _class: *mut std::ffi::c_void,
++) {
++    horizon_client::android::host_setup::start();
++}
++
++/// Rust Client: `EngineSetup.nativeCancel`.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_EngineSetup_nativeCancel(
++    _env: *mut std::ffi::c_void,
++    _class: *mut std::ffi::c_void,
++) {
++    horizon_client::android::host_setup::cancel();
++}
++
++/// Rust Client: `EngineSetup.nativeStatus`.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_EngineSetup_nativeStatus(
++    env: jni::JNIEnv,
++    _class: jni::objects::JClass,
++) -> jni::sys::jstring {
++    env.new_string(horizon_client::android::host_setup::status())
++        .map_or(std::ptr::null_mut(), |text| text.into_raw())
++}

@@ -28,14 +28,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
@@ -44,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.filemanager.FileManagerLauncher
+import com.movtery.zalithlauncher.game.account.AccountsManager
 import com.movtery.zalithlauncher.game.rust.GameEdition
 import com.movtery.zalithlauncher.game.rust.RustEdition
 import com.movtery.zalithlauncher.setting.AllSettings
@@ -64,7 +67,7 @@ fun rustEditionProblemText(problem: RustEdition.Problem): String = when (problem
 fun GameEditionCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val edition = AllSettings.gameEdition.state
-    val problem = remember { RustEdition.problem(context) }
+    val problem = remember { runCatching { RustEdition.problem(context) }.getOrNull() }
 
     BackgroundCard(
         modifier = modifier.fillMaxWidth(),
@@ -79,27 +82,23 @@ fun GameEditionCard(modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.titleSmall
             )
 
-            val editions = GameEdition.entries
-            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                editions.forEachIndexed { index, item ->
-                    SegmentedButton(
-                        selected = edition == item,
-                        onClick = { AllSettings.gameEdition.save(item) },
-                        shape = SegmentedButtonDefaults.itemShape(index = index, count = editions.size),
-                        label = {
-                            Text(
-                                text = stringResource(
-                                    when (item) {
-                                        GameEdition.JAVA -> R.string.game_edition_java
-                                        GameEdition.RUST -> R.string.game_edition_rust
-                                    }
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    )
-                }
+            // Two plain buttons: the chosen edition is the filled one.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                EditionButton(
+                    modifier = Modifier.weight(1f),
+                    text = stringResource(R.string.game_edition_java),
+                    selected = edition == GameEdition.JAVA,
+                    onClick = { AllSettings.gameEdition.save(GameEdition.JAVA) }
+                )
+                EditionButton(
+                    modifier = Modifier.weight(1f),
+                    text = stringResource(R.string.game_edition_rust),
+                    selected = edition == GameEdition.RUST,
+                    onClick = { AllSettings.gameEdition.save(GameEdition.RUST) }
+                )
             }
 
             when (edition) {
@@ -129,6 +128,82 @@ fun GameEditionCard(modifier: Modifier = Modifier) {
                     RustFolderRow()
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EditionButton(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (selected) {
+        Button(modifier = modifier, onClick = onClick) {
+            Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    } else {
+        OutlinedButton(modifier = modifier, onClick = onClick) {
+            Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/**
+ * The bottom of the home screen's action menu while the Rust Edition is chosen: what will
+ * start, and the launch button. Resources not prepared yet: the launcher's own download
+ * screen opens first (RustSetupActivity).
+ */
+@Composable
+fun RustVersionsContent(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    var problem by remember { mutableStateOf<RustEdition.Problem?>(null) }
+    problem?.let { current ->
+        RustEditionProblemDialog(problem = current, onDismiss = { problem = null })
+    }
+
+    Column(modifier = modifier) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.game_edition_rust),
+                maxLines = 1,
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                text = stringResource(R.string.rust_edition_version, RustEdition.MINECRAFT_VERSION),
+                maxLines = 1,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+        Button(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp)
+                .padding(bottom = 8.dp),
+            onClick = {
+                val found = runCatching { RustEdition.problem(context) }.getOrNull()
+                if (found != null) {
+                    problem = found
+                } else {
+                    runCatching {
+                        RustEdition.launch(
+                            context = context,
+                            account = AccountsManager.currentAccountFlow.value
+                        )
+                    }
+                }
+            }
+        ) {
+            Text(
+                text = stringResource(R.string.main_launch_game),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

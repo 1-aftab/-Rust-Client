@@ -106,9 +106,8 @@ its account screens. Rust Client therefore hosts it rather than embeds it:
 |---|---|
 | Edition selector, launch button, folder shortcuts | Rust Client (Compose) |
 | Game window, rendering, title screen, menus, inventory, settings | Starling, unchanged |
-| On-screen controls **while a world is played** | Rust Client: the Zalith control layout |
-| Touch in menus and the inventory | Starling's own touch handling |
-| Player name | the launcher's current account name, handed over at start |
+| On-screen controls, mouse pointer, game menu | Rust Client: the launcher's control layout and menu |
+| Player name and skin | the launcher's current account, handed over at every start |
 
 ### Pieces
 
@@ -125,6 +124,25 @@ its account screens. Rust Client therefore hosts it rather than embeds it:
 - `setting/AllSettings.gameEdition` persists the choice; `GameEditionCard` (home screen) changes
   it; `LauncherScreen.VersionsContent` starts the chosen edition.
 
+### Game resources (first start)
+
+Starling ships no Minecraft files; they are fetched from Mojang and prepared on the device. In
+Rust Client this is shown by the launcher, not by the engine: when `<filesDir>/rust-engine/resources`
+is missing, the launch button opens `RustSetupActivity` (Compose, process `:rustsetup`). It loads
+the engine library without its game and runs the engine's own downloader and preparer through
+`EngineSetup` (patch `0002-rust-client-host-setup.patch`), polling it for progress. Once done, the
+game starts and loads straight into its title screen. The engine's built-in set-up screen remains
+as a fallback if the prepared resources fail to load.
+
+### Accounts and skin
+
+The launcher is the only place accounts and skins are managed. At every start `RustEdition.launch`
+writes the current account's name and skin into the engine's files (`horizon-args.txt`,
+`<game folder>/horizon-player.txt`, `skins/launcher.png`) and sets `RUST_CLIENT_HOST_ACCOUNTS=1`.
+Patch `0003` makes the engine honour that: no account button on its title screen, and its Skin
+Customization page keeps only vanilla's rows. The same patch stops the engine drawing its own
+on-screen controls; the launcher's control layout is the only one.
+
 ### Controls
 
 A `NativeActivity` owns its window's surface, so no view can be drawn over the game in the same
@@ -138,12 +156,42 @@ LayerController widget ─ ClickEvent ─▶ RustInputAdapter ─▶ StarlingAct
                                                             keyboard / mouse window events
 ```
 
-The engine calls `capturePointer(true)` when a world takes the mouse and `capturePointer(false)`
-for every menu; the overlay is shown and hidden on exactly that signal. Outside the widgets a drag
-turns the view, a tap is a right click, a long press holds the left button.
+The overlay is shown while the engine reads the host's input (`nativeExternalReady`, polled by
+`RustGameActivity`; false while the engine starts and while it is paused) and has two states,
+switched by the engine's `capturePointer`:
 
-Not mapped: the layout events "switch IME", "open Zalith game menu" and "send text"; gamepad and
-gyroscope settings of the launcher; per-version control layouts (the global one is used).
+| State | What the overlay does |
+|---|---|
+| A world is played (`capturePointer(true)`) | The layout's controls; outside them a drag turns the view, a tap is a right click, a long press holds the left button. |
+| A screen of the game (`capturePointer(false)`) | The layout's menu-state controls and the launcher's mouse pointer. Mouse mode *slide*: a touchpad (drag moves the pointer, tap clicks, long press drags, two fingers scroll), sent as mouse events. Mouse mode *click*: every finger is handed to the engine as a touch of its own (`nativeExternalTouch`), so its screens are used directly. |
+
+Over both sit the floating menu button and the game menu (`GameMenu` in `RustControlsOverlay.kt`):
+input method (`nativeExternalKeyboard`), control layout picker, the layout editor
+(`ControlEditorActivity`; the layout is reloaded on return), opacity and mouse settings, quit.
+The layout events "switch IME" and "open game menu" do the same.
+
+Engine side (patches 0004 and 0005): the screens that read touches only (mod catalog, the cards
+over the title) take the pointer's left button as a finger; the on-screen keyboard also opens
+without the engine's touch mode; the engine's update offer is off; the engine's own screens use
+the launcher's dark colour scheme (`horizon-theme` `DARK`).
+
+How the game's screens are touched is one setting (`AllSettings.rustTouchScreen`, on by default),
+switched by the round button at the top right of those screens and in the game menu: on, fingers
+go to the game as touches where they are and no pointer shows; off, the screen is a touchpad for
+the mouse pointer.
+
+The mod catalog (patch 0006) is the launcher's screen, not the engine's: where the game would
+open its catalog it calls `StarlingActivity.openCatalog(shelf)`, and `RustGameActivity` shows
+`RustCatalogDialog` (Compose, laid out as the launcher's download results). The dialog searches,
+installs and removes through `EngineCatalog` (JNI into `android.rs` `host_catalog`, which runs
+the engine's own `starling-catalog`), and the game refreshes its pages from the recorded changes
+in `poll_catalog`.
+
+`tools/build_engine.py` finally renames the engine in every text it shows (translations and the
+string literals of its Rust sources), so the player only ever reads the launcher's name.
+
+Not mapped: the layout event "send text"; gamepad and gyroscope settings of the launcher;
+per-version control layouts (the global one is used).
 
 ### Storage
 
@@ -177,7 +225,50 @@ build, the engine was built with NDK 28).
 
 - ARM64 only, Vulkan 1.3 only, Minecraft 26.3 only.
 - No Java mods; Starling has its own mod formats.
-- Starling's built-in account screens exist beside the launcher's accounts; only the name is passed.
 - The engine downloads Minecraft's assets from Mojang at first start and needs network for that.
 - CI builds the engine with upstream's `quick` profile (no LTO), which is slower at run time than
   upstream's release builds.
+
+## Look
+
+The launcher has one look in two modes, white and dark (`ui/theme/RustClientColors.kt`); the
+colour themes, the dynamic and the custom colour are no longer offered, only the dark mode
+setting. Type is Nunito (`res/font`, SIL OFL 1.1, `docs/NUNITO_LICENSE.txt`) and corners are
+rounder (`ui/theme/Type.kt`: `AppTypography`, `AppShapes`). The engine's own screens use the dark
+palette (patch 0007, `RustEngine/src/main/res/values/rust_engine.xml`). The same patch puts the
+built-in shader pack in `shaderpacks/` as `RustClientVisuals.zip`.
+
+The launcher's own arrangement: no title bar; a floating rail at the left side carries the
+navigation (`MainScreen.kt`), and the launch card starts beside it (`launcherActionMenuSide`).
+Items enter by growing into place while they fade in (`ui/components/_Animated.kt`).
+
+Engine patch 0008: the engine's own touch controls are not offered in its Controls page (the
+launcher's are the only ones), and the offer to import another app's worlds is off.
+
+In the Rust Edition's process the settings are read on every start and resume
+(`RustGameActivity`: `loadAllSettings`), and the layout editor opens as
+`RustControlEditorActivity`: the launcher's editor, translucent, in the game's process and task.
+
+## Rust Edition mods (the mod compiler)
+
+The Rust engine has no mod loader. A Rust Edition mod (`.hnmod`, "native mod" in the catalog) is
+Rust source that has to be compiled into the game itself. Upstream does that on its own build
+server, which would send back a game without this launcher's patches, so Rust Client compiles
+its own, for free, on GitHub Actions in this repository:
+
+1. The player installs mods from the catalog and presses **Compile** on the Mods page.
+2. Patch `0009` (`game/native_builds.rs`, `request_build`) first looks in this repository's
+   `native-builds` release for a build of exactly those mods and downloads it if there is one.
+   Otherwise it opens a filled-in GitHub issue titled `[native build] <mods>` in the browser.
+3. `.github/workflows/native-mods.yml` reads the issue, fetches the engine as the APK's is
+   (`RustEngine/tools/build_engine.py --fetch-only`: `engine.lock` + `patches/`), fetches the
+   mods from the registry checked against its SHA-256 (`RustEngine/tools/native_mods.py`), runs
+   the engine's own `packaging/android/native_build.sh`, and uploads `v<version>__<ids>.so` and
+   `.json` to the release `native-builds`. The issue is answered and closed.
+4. Pressing Compile again downloads the build; it is used from the next start. The engine's own
+   safety checks stay: SHA-256, and a build is only loaded by the APK install it was fetched under.
+
+Limits: ARM64 only; the workflow runs on issues only once it is on the default branch; a build
+is made for one engine version, so every engine update needs new builds; a mod that does not
+compile against this engine version fails the build. The repository to ask is the constant
+`MOD_BUILDS` in `starling_releases.rs` (patch `0009`): a fork has to change it.

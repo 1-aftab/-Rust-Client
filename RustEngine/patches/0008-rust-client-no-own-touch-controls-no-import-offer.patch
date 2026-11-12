@@ -1,0 +1,35 @@
+diff --git a/crates/horizon-client-render/src/options_ui.rs b/crates/horizon-client-render/src/options_ui.rs
+index c83b1c8..687defe 100644
+--- a/crates/horizon-client-render/src/options_ui.rs
++++ b/crates/horizon-client-render/src/options_ui.rs
+@@ -3799,3 +3799,17 @@ impl OptionsUi {
+                 let mut rows = Vec::new();
+-                if android {
++                // Rust Client: the game is played with the host launcher's controls only; the
++                // game's own touch controls, their settings and their editor are not offered.
++                const OWN_TOUCH_CONTROLS: bool = false;
++                if android && !OWN_TOUCH_CONTROLS {
++                    rows.push(Row::Buttons(
++                        button(
++                            0.,
++                            0.,
++                            310.,
++                            tr("horizon.pages.open.controller"),
++                            Act::Push(Page::Controller),
++                        ),
++                        None,
++                    ));
++                } else if android {
+                     rows.push(Row::Big(Opt::AndroidInputSelection));
+diff --git a/crates/horizon-client/src/android.rs b/crates/horizon-client/src/android.rs
+index c2e49d6..738b740 100644
+--- a/crates/horizon-client/src/android.rs
++++ b/crates/horizon-client/src/android.rs
+@@ -271,2 +271,7 @@ pub fn file_access_allowed() -> bool {
+ pub fn horizon_android_installed() -> bool {
++    // Rust Client: no offer to bring another app's worlds over ("Coming from ...?").
++    const IMPORT_OFFER: bool = false;
++    if !IMPORT_OFFER {
++        return false;
++    }
+     with_activity(|env, activity| {

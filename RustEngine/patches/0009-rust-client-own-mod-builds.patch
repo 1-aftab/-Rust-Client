@@ -1,0 +1,126 @@
+diff --git a/crates/horizon-client/src/game/native_builds.rs b/crates/horizon-client/src/game/native_builds.rs
+index 7ff7222..99da3f9 100644
+--- a/crates/horizon-client/src/game/native_builds.rs
++++ b/crates/horizon-client/src/game/native_builds.rs
+@@ -63,2 +63,4 @@ const ID: &str = "starling-native-builds";
+ // The hosted build service and prebuilt libraries currently target ARM64 only.
++/// Rust Client: Compile asks the launcher's repository, never the build service.
++const OWN_BUILDS: bool = true;
+ const SERVICE_SUPPORTED: bool = cfg!(target_arch = "aarch64");
+@@ -334,3 +336,3 @@ fn list(version: &str) -> Result<Vec<Build>, String> {
+     let mut errors = Vec::new();
+-    for repository in releases::REPOSITORIES {
++    for repository in releases::MOD_BUILDS {
+         let release = get(&releases::native_builds_url(repository), version)
+@@ -355,2 +357,92 @@ fn list(version: &str) -> Result<Vec<Build>, String> {
+ 
++/// Rust Client: a letter, digit, `-`, `.`, `_` or `~` as it is, anything else as %XX.
++fn url_part(text: &str) -> String {
++    let mut out = String::new();
++    for b in text.bytes() {
++        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
++            out.push(b as char);
++        } else {
++            out.push_str(&format!("%{b:02X}"));
++        }
++    }
++    out
++}
++
++/// Rust Client: the folder's native mods that are on, each `(id, version)`, in order.
++fn folder_mods_wanted() -> Vec<(String, String)> {
++    let off = horizon_client::mod_list::ModList::load(&Game::game_dir()).disabled;
++    let folder = Game::game_dir().join(horizon_client::mod_list::NATIVE_DIR);
++    let mut mods: Vec<(String, String)> = std::fs::read_dir(&folder)
++        .into_iter()
++        .flatten()
++        .flatten()
++        .map(|e| e.path())
++        .filter(|p| p.extension().is_some_and(|e| e == "hnmod"))
++        .filter_map(|p| horizon_mods::index::native::Bundle::read(&p).ok())
++        .map(|bundle| (bundle.manifest.id, bundle.manifest.version))
++        .filter(|(id, _)| !off.contains(id))
++        .collect();
++    mods.sort();
++    mods.dedup_by(|a, b| a.0 == b.0);
++    mods
++}
++
++/// Rust Client: Compile, without a build server. A build of exactly these mods that the
++/// repository already published is downloaded and chosen for the next start; otherwise the
++/// browser opens a filled-in request (a GitHub issue), which the repository's native-mods.yml
++/// answers by compiling this game with the mods and publishing the result.
++fn request_build(version: &str, shared: &Mutex<Shared>) -> Result<String, String> {
++    let wanted = folder_mods_wanted();
++    if wanted.is_empty() {
++        return Err("There is no native mod to compile.".into());
++    }
++    shared
++        .lock()
++        .unwrap_or_else(PoisonError::into_inner)
++        .status = "Looking for a finished build...".into();
++    let ids: BTreeSet<String> = wanted.iter().map(|(id, _)| id.clone()).collect();
++    if let Ok(builds) = list(version) {
++        let made = builds
++            .iter()
++            .find(|b| b.mods.iter().cloned().collect::<BTreeSet<String>>() == ids);
++        if let Some(build) = made {
++            shared
++                .lock()
++                .unwrap_or_else(PoisonError::into_inner)
++                .status = "Downloading...".into();
++            let name = download(build, version, shared)?;
++            let _ = std::fs::remove_file(dir().join("starts"));
++            return Ok(name);
++        }
++    }
++    let mods = wanted
++        .iter()
++        .map(|(id, v)| format!("{id}@{v}"))
++        .collect::<Vec<_>>()
++        .join(" ");
++    let title = format!("[native build] {mods}");
++    let title: String = title.chars().take(200).collect();
++    let body = format!("### Version\n\n{version}\n\n### Mods\n\n{mods}\n");
++    let url = format!(
++        "https://github.com/{}/issues/new?title={}&body={}",
++        releases::MOD_BUILDS[0],
++        url_part(&title),
++        url_part(&body)
++    );
++    if horizon_client::platform::open_link(&url) == Some(true) {
++        Err("No build with these mods exists yet, so a request was opened in your browser. \
++             Sign in to GitHub and press the green Create button there, without changing the \
++             text. The build takes from 20 minutes to 2 hours and the request is answered \
++             when it is done. Then come back and press Compile again: it downloads the \
++             finished build."
++            .into())
++    } else {
++        Err(format!(
++            "No build with these mods exists yet, and the browser did not open. Create an \
++             issue at github.com/{} with the title: {title}",
++            releases::MOD_BUILDS[0]
++        ))
++    }
++}
++
+ /// The build's library into files/native/NAME/, checked against its JSON, and chosen for the next
+@@ -568,2 +660,7 @@ fn compile(version: &str, github: bool, shared: &Mutex<Shared>) -> Result<String
+     }
++    // Rust Client: its own builds, made in its repository (the build service below would send
++    // back a game without Rust Client's controls, catalog and look).
++    if OWN_BUILDS {
++        return request_build(version, shared);
++    }
+     let say = |text: String| {
+diff --git a/crates/horizon-client/src/starling_releases.rs b/crates/horizon-client/src/starling_releases.rs
+index 973ed14..0bc3197 100644
+--- a/crates/horizon-client/src/starling_releases.rs
++++ b/crates/horizon-client/src/starling_releases.rs
+@@ -13,2 +13,6 @@ pub const REPOSITORIES: [&str; 2] = ["starling-client/starling", "JuanLuci/starl
+ 
++/// Rust Client: where its own mod builds are made and published (.github/workflows/native-mods.yml
++/// of the launcher's repository). The engine's upstream builds don't have Rust Client's patches.
++pub const MOD_BUILDS: [&str; 1] = ["1-aftab/-Rust-Client"];
++
+ /// A repository's latest release, as GitHub's API serves it.

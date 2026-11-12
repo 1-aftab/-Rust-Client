@@ -48,7 +48,6 @@ val libraryData = listOf(
     LibraryInfo("Apache Commons Compress", null, LICENSE_APACHE_2, "https://commons.apache.org/proper/commons-compress"),
     LibraryInfo("Apache Commons IO", null, LICENSE_APACHE_2, "https://commons.apache.org/proper/commons-io"),
     LibraryInfo("ByteHook", "Copyright © 2020-2024 ByteDance, Inc.", License(LICENSE_MIT, R.raw.bhook_license), "https://github.com/bytedance/bhook"),
-    LibraryInfo("BuildKeys", "Copyright © 2026 MovTery", LICENSE_APACHE_2, "https://github.com/MovTery/BuildKeys"),
     LibraryInfo("Coil Compose", "Copyright © 2025 Coil Contributors", LICENSE_APACHE_2, "https://github.com/coil-kt/coil"),
     LibraryInfo("Coil Gifs", "Copyright © 2025 Coil Contributors", LICENSE_APACHE_2, "https://github.com/coil-kt/coil"),
     LibraryInfo("Coil SVG", "Copyright © 2025 Coil Contributors", LICENSE_APACHE_2, "https://github.com/coil-kt/coil"),

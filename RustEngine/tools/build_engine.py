@@ -79,7 +79,94 @@ def fetch(pins):
     patches = sorted(PATCHES.glob("*.patch"))
     for patch in patches:
         run("git", "apply", "--index", "--whitespace=nowarn", patch, cwd=SOURCE)
+    rebrand()
     return [p.name for p in patches]
+
+
+def rebrand():
+    """Every text the engine shows names the host launcher, which is what the player sees and
+    installed: the translations, and the texts written in the Rust sources. Only string
+    literals are touched (names of types, modules, files and environment variables stay), so
+    the sources compile as before."""
+    import json
+    import re
+    # Not inside a header, path or identifier-like word ("X-Horizon", "Starling/1.0").
+    brand = re.compile(r"(?<![-_/\w])(?:Starling|Horizon)(?: Android)?(?![-_/\w])")
+
+    def named(text):
+        return brand.sub("Rust Client", text).replace("Starling/{", "RustClient/{")
+
+    for path in sorted((SOURCE / "crates/horizon-client/assets/horizon/lang").glob("*.json")):
+        texts = json.loads(path.read_text(encoding="utf-8"))
+        for key, text in texts.items():
+            if isinstance(text, str):
+                texts[key] = named(text)
+        path.write_text(json.dumps(texts, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    changed = 0
+    # The catalog is the desktop launcher's mod browser, compiled into the game from there.
+    sources = sorted((SOURCE / "crates").rglob("*.rs")) + sorted(
+        (SOURCE / "launcher/src").rglob("browser*/**/*.rs")
+    ) + sorted((SOURCE / "launcher/src").glob("browser*.rs"))
+    for path in sources:
+        source = path.read_text(encoding="utf-8")
+        if not brand.search(source):
+            continue
+        swept = sweep_rust(source, named)
+        # Not a text: what the mod registry's own entries say their author is.
+        swept = swept.replace('== ["Rust Client"]', '== ["Horizon"]')
+        if swept != source:
+            path.write_text(swept, encoding="utf-8")
+            changed += 1
+    print(f"build_engine: texts renamed in {changed} source files", flush=True)
+
+
+def sweep_rust(source, named):
+    """`source` with `named` applied to the contents of its string literals. A small lexer:
+    comments, string and raw string literals, character literals and lifetimes."""
+    import re
+    raw = re.compile(r'b?r(#*)"')
+    char = re.compile(r"'(?:\\(?:u\{[0-9a-fA-F_]+\}|x[0-9a-fA-F]{2}|.)|[^\\'\n])'")
+    out = []
+    i, n = 0, len(source)
+    while i < n:
+        c = source[i]
+        if source.startswith("//", i):
+            j = source.find("\n", i)
+            j = n if j < 0 else j
+            out.append(source[i:j])
+            i = j
+        elif source.startswith("/*", i):
+            j = source.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append(source[i:j])
+            i = j
+        elif c in "br" and (i == 0 or not (source[i - 1].isalnum() or source[i - 1] == "_")) \
+                and raw.match(source, i):
+            m = raw.match(source, i)
+            end = '"' + m.group(1)
+            j = source.find(end, m.end())
+            j = n if j < 0 else j
+            out.append(source[i:m.end()] + named(source[m.end():j]))
+            i = j
+        elif c == '"':
+            j = i + 1
+            while j < n and source[j] != '"':
+                j += 2 if source[j] == "\\" else 1
+            out.append('"' + named(source[i + 1:j]))
+            i = j
+            if i < n:
+                out.append('"')
+                i += 1
+        elif c == "'":
+            m = char.match(source, i)
+            j = m.end() if m else i + 1
+            out.append(source[i:j])
+            i = j
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
 
 
 def upstream():

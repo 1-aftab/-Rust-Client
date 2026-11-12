@@ -67,7 +67,7 @@ final class HorizonImport {
             @Override
             public void run() {
                 WorkService.hold(activity, REASON,
-                        "Bringing your worlds over from Horizon Android", true);
+                        "Bringing your worlds over from Rust Client Android", true);
                 try {
                     String said = bring(activity, tree);
                     if (said != null) {
@@ -99,7 +99,7 @@ final class HorizonImport {
      */
     private static String bring(Activity activity, Uri tree) {
         if (!AUTHORITY.equals(tree.getAuthority())) {
-            return "That is not Horizon Android's folder: pick Horizon in the list of places";
+            return "That is not Rust Client Android's folder: pick Rust Client in the list of places";
         }
         ContentResolver files = activity.getContentResolver();
         File inbox = new File(EngineHost.filesDir(activity), "import-inbox");
@@ -127,10 +127,10 @@ final class HorizonImport {
                 brought += bring(files, tree, inbox, path[1], document(files, tree, picked));
             }
         } catch (IOException | RuntimeException e) {
-            android.util.Log.w("starling", "could not read Horizon Android's folder", e);
-            return "Could not read Horizon Android's files: close Horizon Android, then try again";
+            android.util.Log.w("starling", "could not read Rust Client Android's folder", e);
+            return "Could not read Rust Client Android's files: close Rust Client Android, then try again";
         }
-        return brought == 0 ? "Horizon Android has no worlds or resource packs there" : null;
+        return brought == 0 ? "Rust Client Android has no worlds or resource packs there" : null;
     }
 
     /** One world or pack into the inbox: 1 when it went, 0 for anything else. */
@@ -255,7 +255,7 @@ final class HorizonImport {
 
     /** A name the inbox can hold (LauncherActivity's rule): no folders, no ".part" at its end. */
     private static String safe(String name) {
-        String clean = name == null || name.isEmpty() ? "Horizon Android" : name;
+        String clean = name == null || name.isEmpty() ? "Rust Client Android" : name;
         clean = clean.replaceAll("[/\\\\:*?\"<>|]", "_");
         return clean.endsWith(".part") ? clean + "_" : clean;
     }

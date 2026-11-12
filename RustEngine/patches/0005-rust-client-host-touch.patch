@@ -1,0 +1,119 @@
+diff --git a/crates/horizon-client/src/android.rs b/crates/horizon-client/src/android.rs
+index 3eb6826..6cc83aa 100644
+--- a/crates/horizon-client/src/android.rs
++++ b/crates/horizon-client/src/android.rs
+@@ -690,6 +690,10 @@ mod input {
+         /// How far the mouse went, in pixels, right and down positive: the view turns by it
+         /// while the game holds the pointer.
+         Motion(f64, f64),
++        /// Rust Client: a finger on the host launcher's window over the game's, which stands
++        /// for a touch on the game's own: the finger's number, 0 when it lands, 1 when it moves,
++        /// 2 when it lifts and 3 when Android takes it away, and where, in window pixels.
++        Finger(u64, u8, f64, f64),
+     }
+ 
+     struct Mouse {
+@@ -829,6 +833,7 @@ mod input {
+     pub fn take_mouse_events() -> Vec<MouseEvent> {
+         let mut mouse = MOUSE.lock().unwrap_or_else(|e| e.into_inner());
+         mouse.taken = true;
++        TAKEN_AT.store(since_start(), Ordering::Relaxed);
+         std::mem::take(&mut mouse.events)
+     }
+ 
+@@ -875,9 +880,19 @@ mod input {
+         EXTERNAL_KEYBOARD.swap(false, Ordering::Relaxed)
+     }
+ 
+-    /// Whether the game reads the mouse yet: before, the host's events would be lost.
++    /// When the game last read the mouse's events, in milliseconds since it first did.
++    static TAKEN_AT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++
++    fn since_start() -> u64 {
++        static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
++        START.get_or_init(std::time::Instant::now).elapsed().as_millis() as u64
++    }
++
++    /// Whether the game reads the mouse now: before it does, on the screens around the game
++    /// and while it is paused in the background, the host's events would be lost.
+     pub fn external_ready() -> bool {
+         MOUSE.lock().unwrap_or_else(|e| e.into_inner()).taken
++            && since_start().saturating_sub(TAKEN_AT.load(Ordering::Relaxed)) < 1500
+     }
+ 
+     /// A mouse event of the host's controls, for the game's next loop iteration.
+diff --git a/crates/horizon-client/src/android_lib.rs b/crates/horizon-client/src/android_lib.rs
+index bf9cd8e..1e900aa 100644
+--- a/crates/horizon-client/src/android_lib.rs
++++ b/crates/horizon-client/src/android_lib.rs
+@@ -109,6 +109,30 @@ extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_nativeExter
+     horizon_client::android::set_external_controls(on != 0);
+ }
+ 
++/// Rust Client: `StarlingActivity.nativeExternalTouch`. A finger on the host launcher's window
++/// over the game's, which the game takes as a touch on its own: `phase` 0 lands, 1 moves,
++/// 2 lifts, 3 is taken away; (`x`, `y`) in window pixels.
++#[unsafe(no_mangle)]
++extern "system" fn Java_io_github_juanluci_starling_StarlingActivity_nativeExternalTouch(
++    _env: *mut std::ffi::c_void,
++    _class: *mut std::ffi::c_void,
++    finger: i32,
++    phase: i32,
++    x: f32,
++    y: f32,
++) {
++    use horizon_client::android::MouseEvent;
++    if !(0..=3).contains(&phase) {
++        return;
++    }
++    horizon_client::android::push_external_mouse(MouseEvent::Finger(
++        finger as u32 as u64,
++        phase as u8,
++        f64::from(x),
++        f64::from(y),
++    ));
++}
++
+ /// Rust Client: `StarlingActivity.nativeExternalKeyboard`. The keyboard button of the host
+ /// launcher's controls: the on-screen keyboard shows for the text field in use.
+ #[unsafe(no_mangle)]
+diff --git a/crates/horizon-client/src/game/input_mode.rs b/crates/horizon-client/src/game/input_mode.rs
+index 919a13e..2d23e0e 100644
+--- a/crates/horizon-client/src/game/input_mode.rs
++++ b/crates/horizon-client/src/game/input_mode.rs
+@@ -74,7 +74,13 @@ impl Game<'_> {
+         if events.is_empty() {
+             return;
+         }
+-        self.input_used(InputMode::KeyboardMouse);
++        // Rust Client: the host's fingers are touches, which keep the game on the touch screen.
++        if events
++            .iter()
++            .any(|e| !matches!(e, crate::android::MouseEvent::Finger(..)))
++        {
++            self.input_used(InputMode::KeyboardMouse);
++        }
+         let Some(id) = self.window.as_ref().map(|w| w.id()) else {
+             return;
+         };
+@@ -108,6 +114,20 @@ impl Game<'_> {
+                     self.grabbed_mouse_motion(x, y);
+                     continue;
+                 }
++                crate::android::MouseEvent::Finger(finger, phase, x, y) => {
++                    WindowEvent::Touch(winit::event::Touch {
++                        device_id,
++                        phase: match phase {
++                            0 => TouchPhase::Started,
++                            1 => TouchPhase::Moved,
++                            2 => TouchPhase::Ended,
++                            _ => TouchPhase::Cancelled,
++                        },
++                        location: PhysicalPosition::new(x, y),
++                        force: None,
++                        id: finger,
++                    })
++                }
+             };
+             self.handle_window_event(event_loop, id, event, InputOrigin::User);
+         }
