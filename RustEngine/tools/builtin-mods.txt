@@ -13,5 +13,36 @@ fullbright_horizon@1.0.0
 # In place of the two below, which do the same jobs and do compile:
 mousetricks@0.2.0
 hud_plus@4
+# Found to fit this engine by the mod probe (RustEngine/probe), each alone:
+armor_status@1.0.0
+coords_hud@2.0.0
+held_item_info@0.1.0
+crosshair_indicator@1.0.0
+chat_heads_rust@1.0.2
+chat_animation@0.1.3
+lookat@0.2.1
+freelook@0.3.1
+smartf3@0.1.0
+status_effect_hud@1.0.0
+toggle_sprint@1.0.0
+waypoints@1.1.0
+inventory_profiles@1.0.0
+itemnew@0.1.1
+shulker_peek@0.1.0
+rarity_borders@0.1.1
+map_preview@1.0.0
+enchantmenthints@0.1.0
+light_overlay@1.0.0
+blood_particles@1.2.0
+visuality_horizon@1.0.2
+elytratrails@0.1.2
+smoothie_capes@0.5.1
+connected_textures@0.1.7
+right_click_crops@1.0.1
+veinminer@0.3.0
+treefall@0.3.0
+fast_trading@1.0.0
+fast_items@0.1.0
+accurate_block_placement@1.0.0
 # Asked for but not built in: basic_hud 0.5.0 and mousetweaks 1.1.0 are written for a newer
 # engine than 0.8.0 and do not compile against it (LanHost.models, ui::action_button, ...).

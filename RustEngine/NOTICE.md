@@ -42,3 +42,10 @@ mod's page names its authors, source and licence: Zoom, Minimap, Recipes, FPS Co
 Keystrokes (Horizon's official mods, MIT), AppleSkin (MIT), Eating Animation (MIT), Fullbright
 (MIT), Mouse Tricks (MIT) and HUD+ (MIT). They are unmodified, except that
 `tools/mod_tweaks.py` adds free placement to the FPS Counter, Keystrokes and the Minimap.
+
+Also built in, all MIT by their registry pages and unmodified: Armor Status, Coordinates HUD,
+Held Item Info, Crosshair Indicator, Chat Heads Horizon, ChatAnimationHorizon, LookAt, Freelook,
+SmartF3, Status Effect HUD, Toggle Sprint, Waypoints, Inventory Profiles, Item New, ShulkerPeek,
+Rarity Borders, Map Preview, Enchantment Hints, Light Overlay, Blood Particles, Visuality,
+ElytraTrails, Smoothie Capes, ContinuityHorizon, Right-Click Crops, Veinminer, TreeFall, Fast
+Trading, Fast Items for Horizon and Accurate Block Placement.
