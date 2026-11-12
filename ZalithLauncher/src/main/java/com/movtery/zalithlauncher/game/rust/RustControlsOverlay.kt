@@ -382,7 +382,7 @@ private fun Overlay(
             },
             onEditLayout = { current?.file?.let(onEditLayout) },
             onKeyboard = { adapter.keyboard() },
-            cheats = remember(context) { RustCheats(RustEdition.gameFolder(context)) },
+            qol = remember(context) { RustQol(RustEdition.gameFolder(context)) },
             onMoveHud = {
                 adapter.releaseAll()
                 hudEditor = true
@@ -460,18 +460,18 @@ private fun GameMenu(
     onLayout: (LayoutEntry) -> Unit,
     onEditLayout: () -> Unit,
     onKeyboard: () -> Unit,
-    cheats: RustCheats,
+    qol: RustQol,
     onMoveHud: () -> Unit,
     onQuit: () -> Unit
 ) {
-    // the "Cheats" page takes the menu's place while it is open
-    var cheatsPage by remember { mutableStateOf(false) }
+    // the "QOL" page takes the menu's place while it is open
+    var qolPage by remember { mutableStateOf(false) }
     MenuSubscreen(
         state = state,
         closeScreen = close
     ) {
-        if (cheatsPage) {
-            CheatsPage(cheats = cheats, onBack = { cheatsPage = false })
+        if (qolPage) {
+            QolPage(qol = qol, onBack = { qolPage = false })
         } else {
         Text(
             modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
@@ -525,8 +525,8 @@ private fun GameMenu(
             item {
                 MenuTextButton(
                     modifier = Modifier.fillMaxWidth(),
-                    text = "Cheats",
-                    onClick = { cheatsPage = true }
+                    text = "QOL",
+                    onClick = { qolPage = true }
                 )
             }
             item {
@@ -654,12 +654,12 @@ private fun GameMenu(
     }
 }
 
-/** The game menu's "Cheats" page: a switch a module, and a slider under one that has a value */
+/** The game menu's "QOL" page: a switch for each feature */
 @Composable
-private fun CheatsPage(cheats: RustCheats, onBack: () -> Unit) {
+private fun QolPage(qol: RustQol, onBack: () -> Unit) {
     Text(
         modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
-        text = "Cheats",
+        text = "QOL",
         style = MaterialTheme.typography.titleMedium
     )
     LazyColumn(
@@ -678,31 +678,31 @@ private fun CheatsPage(cheats: RustCheats, onBack: () -> Unit) {
             MenuTextButton(
                 modifier = Modifier.fillMaxWidth(),
                 text = "Turn everything off",
-                onClick = { cheats.allOff() }
+                onClick = { qol.allOff() }
             )
         }
-        val rows = RustCheats.ROWS
+        val rows = RustQol.ROWS
         items(rows.size) { index ->
             when (val row = rows[index]) {
-                is RustCheats.Header -> Text(
+                is RustQol.Header -> Text(
                     modifier = Modifier.padding(start = 8.dp, top = 8.dp),
                     text = row.label,
                     style = MaterialTheme.typography.labelLarge
                 )
-                is RustCheats.Switch -> MenuSwitchButton(
+                is RustQol.Switch -> MenuSwitchButton(
                     modifier = Modifier.fillMaxWidth(),
                     text = row.label,
-                    switch = cheats.isOn(row.key),
-                    onSwitch = { cheats.setOn(row.key, it) }
+                    switch = qol.isOn(row.key),
+                    onSwitch = { qol.setOn(row.key, it) }
                 )
-                is RustCheats.Slider -> MenuSliderLayout(
+                is RustQol.Slider -> MenuSliderLayout(
                     modifier = Modifier.fillMaxWidth(),
                     title = row.label + if (row.scale == 10) " (tenths)" else "",
-                    value = cheats.value(row),
+                    value = qol.value(row),
                     valueRange = row.min.toFloat()..row.max.toFloat(),
-                    enabled = cheats.isOn(row.of),
-                    onValueChange = { cheats.setValue(row, it, write = false) },
-                    onValueChangeFinished = { cheats.setValue(row, it, write = true) },
+                    enabled = qol.isOn(row.of),
+                    onValueChange = { qol.setValue(row, it, write = false) },
+                    onValueChangeFinished = { qol.setValue(row, it, write = true) },
                     suffix = if (row.scale == 10) null else row.suffix
                 )
             }

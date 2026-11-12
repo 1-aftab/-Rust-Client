@@ -4,11 +4,11 @@ import androidx.compose.runtime.mutableStateMapOf
 import java.io.File
 
 /**
- * The Rust Edition's cheat modules: the switches and values of the game menu's "Cheats" page.
- * They are kept in `rust-client-cheats.txt` in the game folder (`key=value` lines), which the
- * engine reads again twice a second (its `rc_cheats.rs`), so a switch acts at once.
+ * The Rust Edition's quality-of-life switches: the rows of the game menu's "QOL" page.
+ * They are kept in `rust-client-qol.txt` in the game folder (`key=value` lines), which the
+ * engine reads again twice a second (its `rc_qol.rs`), so a switch acts at once.
  */
-class RustCheats(gameFolder: File) {
+class RustQol(gameFolder: File) {
     /** A row of the page: a switch, or a slider whose value is [scale] times what is written */
     sealed interface Row {
         val key: String
@@ -65,7 +65,7 @@ class RustCheats(gameFolder: File) {
         if (write) save()
     }
 
-    /** Switches every module off (the values stay) */
+    /** Switches everything off */
     fun allOff() {
         ROWS.filterIsInstance<Switch>().filter { it.key !in ON_BY_DEFAULT }.forEach { values[it.key] = "false" }
         save()
@@ -84,45 +84,14 @@ class RustCheats(gameFolder: File) {
     }
 
     companion object {
-        const val FILE = "rust-client-cheats.txt"
+        const val FILE = "rust-client-qol.txt"
 
-        /** The choices of what to attack and show, which start on */
-        private val ON_BY_DEFAULT = setOf("target_players", "target_hostile", "show_players", "show_hostile")
+        /** Switches that start on (none) */
+        private val ON_BY_DEFAULT = emptySet<String>()
 
         val ROWS: List<Row> = listOf(
-            Header("Combat"),
-            Switch("killaura", "Kill Aura"),
-            Slider("aura_range", "Kill Aura range", 10, 60, 35, 10, " blocks", "killaura"),
-            Switch("triggerbot", "Trigger Bot"),
-            Slider("trigger_delay", "Trigger Bot delay", 0, 20, 1, 1, " ticks", "triggerbot"),
-            Switch("target_players", "Attack players"),
-            Switch("target_hostile", "Attack monsters"),
-            Switch("target_passive", "Attack animals"),
-            Switch("criticals", "Criticals"),
-            Switch("reach", "Reach"),
-            Slider("reach_extra", "Extra reach", 0, 30, 15, 10, " blocks", "reach"),
-            Switch("velocity", "Velocity (less knockback)"),
-            Slider("velocity_percent", "Knockback taken", 0, 100, 0, 1, "%", "velocity"),
-            Header("Movement"),
-            Switch("sprint", "Sprint (always)"),
-            Switch("fly", "Fly"),
-            Slider("fly_speed", "Fly speed", 2, 100, 10, 10, "x", "fly"),
-            Switch("speed", "Speed"),
-            Slider("speed_factor", "Speed factor", 10, 50, 15, 10, "x", "speed"),
-            Switch("nofall", "No Fall"),
-            Switch("step", "Step"),
-            Slider("step_height", "Step height", 6, 100, 15, 10, " blocks", "step"),
-            Switch("spider", "Spider (climb walls)"),
-            Switch("jesus", "Jesus (water walk)"),
-            Header("World"),
-            Switch("esp", "ESP (boxes through walls)"),
-            Switch("tracers", "Tracers"),
-            Switch("show_players", "Show players"),
-            Switch("show_hostile", "Show monsters"),
-            Switch("show_passive", "Show animals"),
-            Switch("xray", "X-Ray (ore and chest finder)"),
-            Switch("automine", "Auto Mine"),
-            Switch("antiafk", "Anti AFK")
+            Switch("sprint", "Auto Sprint"),
+            Switch("xray", "X-Ray (ores, chests, spawners, lava)")
         )
     }
 }

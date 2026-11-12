@@ -1,0 +1,184 @@
+diff --git a/crates/horizon-client-render/src/mesher.rs b/crates/horizon-client-render/src/mesher.rs
+index a5aff35..3d0a5cf 100644
+--- a/crates/horizon-client-render/src/mesher.rs
++++ b/crates/horizon-client-render/src/mesher.rs
+@@ -501,2 +501,16 @@ enum Tint {
+ }
++/// Rust Client, X-Ray: while set, a section is meshed as if every block but ores, containers,
++/// spawners and lava were air, at full light. The game sets it and meshes every section again.
++pub static XRAY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
++/// Whether X-Ray still draws the block `name` (without its namespace).
++fn xray_keeps(name: &str) -> bool {
++    name.ends_with("_ore")
++        || name.ends_with("chest")
++        || name.ends_with("shulker_box")
++        || name.ends_with("spawner")
++        || matches!(
++            name,
++            "ancient_debris" | "barrel" | "lava" | "vault" | "end_portal_frame" | "budding_amethyst"
++        )
++}
+ /// Per-state data the mesher needs on every block, flattened for speed.
+@@ -568,2 +582,4 @@ pub struct MeshTables {
+     full_faces: Vec<u8>,
++    /// By state, whether X-Ray still draws it.
++    xray_keep: Vec<bool>,
+     pub visibility: FaceVisibility,
+@@ -616,3 +632,7 @@ impl MeshTables {
+         let mut info = Vec::with_capacity(facts.states.len());
++        let mut xray_keep = Vec::with_capacity(facts.states.len());
+         for (id, s) in facts.states.iter().enumerate() {
++            xray_keep.push(xray_keeps(
++                s.name.strip_prefix("minecraft:").unwrap_or(&s.name),
++            ));
+             let state = assets
+@@ -742,2 +762,3 @@ impl MeshTables {
+             info,
++            xray_keep,
+             visibility,
+@@ -1399,2 +1420,12 @@ impl Mesher<'_> {
+         scratch.padded.fill(region, sy, own);
++        if XRAY.load(std::sync::atomic::Ordering::Relaxed) {
++            // Rust Client, X-Ray: what isn't kept is air, and all of it is fully lit.
++            let keep = &self.tables.xray_keep;
++            for block in &mut scratch.padded.blocks {
++                if !keep.get(*block as usize).copied().unwrap_or(false) {
++                    *block = 0;
++                }
++            }
++            scratch.padded.light.fill(0xFF);
++        }
+         let pad = &scratch.padded;
+diff --git a/crates/horizon-client/src/client_lib.rs b/crates/horizon-client/src/client_lib.rs
+index a9b81a8..974e8e3 100644
+--- a/crates/horizon-client/src/client_lib.rs
++++ b/crates/horizon-client/src/client_lib.rs
+@@ -75,2 +75,3 @@ pub mod equipment;
+ pub mod extras_hud;
++pub mod rc_qol;
+ pub mod falling_block;
+diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.rs
+index 08a44af..0f49e13 100644
+--- a/crates/horizon-client/src/game.rs
++++ b/crates/horizon-client/src/game.rs
+@@ -292,2 +292,3 @@ mod quick_actions;
+ mod raids;
++mod rc_qol;
+ mod ram_limit;
+diff --git a/crates/horizon-client/src/game/rc_qol.rs b/crates/horizon-client/src/game/rc_qol.rs
+new file mode 100644
+index 0000000..95ca74f
+--- /dev/null
++++ b/crates/horizon-client/src/game/rc_qol.rs
+@@ -0,0 +1,17 @@
++//! Rust Client: the quality-of-life switches at work in the game (`horizon_client::rc_qol`
++//! has the switches themselves). Sprint is with the keys in `game/remote.rs`; X-Ray is in
++//! the section mesher, and here every section is meshed again when it is switched.
++use super::Game;
++use horizon_client::{mesher, rc_qol};
++use std::sync::atomic::Ordering;
++
++impl Game<'_> {
++    /// Once a client tick.
++    pub(super) fn rc_qol_tick(&mut self) {
++        rc_qol::refresh();
++        let xray = rc_qol::get().xray;
++        if mesher::XRAY.swap(xray, Ordering::Relaxed) != xray {
++            self.all_sections_changed();
++        }
++    }
++}
+diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/src/game/remote.rs
+index 9376754..5670a11 100644
+--- a/crates/horizon-client/src/game/remote.rs
++++ b/crates/horizon-client/src/game/remote.rs
+@@ -6311,2 +6311,4 @@ impl Game<'_> {
+         self.native_tick();
++        // Rust Client: the QOL switches (game/rc_qol.rs).
++        self.rc_qol_tick();
+         self.tell_native_now();
+@@ -6500,2 +6502,9 @@ impl Game<'_> {
+         .with_stick(stick.filter(|_| playing));
++        // Rust Client, QOL: Auto Sprint holds the sprint key while moving forward.
++        if playing
++            && horizon_client::rc_qol::get().sprint
++            && (keys.forward || keys.analog.is_some())
++        {
++            keys.sprint = true;
++        }
+         // A server's anticheat simulates Java's keys: eight directions at full speed. A stick's
+diff --git a/crates/horizon-client/src/rc_qol.rs b/crates/horizon-client/src/rc_qol.rs
+new file mode 100644
+index 0000000..bf331b1
+--- /dev/null
++++ b/crates/horizon-client/src/rc_qol.rs
+@@ -0,0 +1,69 @@
++//! Rust Client: the quality-of-life switches. The launcher's "QOL" page writes them to
++//! `rust-client-qol.txt` in the game folder (`key=value` lines); the game reads the file
++//! again twice a second, so a switch acts at once. Everything is off without the file.
++use std::sync::RwLock;
++use std::sync::atomic::{AtomicU32, Ordering};
++
++/// The file, in the game folder (the working directory).
++pub const FILE: &str = "rust-client-qol.txt";
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub struct Qol {
++    /// Always sprint while moving forward.
++    pub sprint: bool,
++    /// Only ores, containers, spawners and lava are drawn, fully lit.
++    pub xray: bool,
++}
++
++pub const OFF: Qol = Qol {
++    sprint: false,
++    xray: false,
++};
++
++impl Qol {
++    pub fn parse(text: &str) -> Self {
++        let mut q = OFF;
++        for line in text.lines() {
++            let Some((key, value)) = line.split_once('=') else {
++                continue;
++            };
++            let value = value.trim();
++            let on = value == "true" || value == "1";
++            match key.trim() {
++                "sprint" => q.sprint = on,
++                "xray" => q.xray = on,
++                _ => {}
++            }
++        }
++        q
++    }
++}
++
++static NOW: RwLock<Qol> = RwLock::new(OFF);
++static CALLS: AtomicU32 = AtomicU32::new(0);
++
++/// The switches as they are now.
++pub fn get() -> Qol {
++    *NOW.read().unwrap_or_else(|e| e.into_inner())
++}
++
++/// Once a client tick: reads the file again every tenth call.
++pub fn refresh() {
++    if CALLS.fetch_add(1, Ordering::Relaxed) % 10 != 0 {
++        return;
++    }
++    let found = std::fs::read_to_string(FILE).map_or(OFF, |text| Qol::parse(&text));
++    *NOW.write().unwrap_or_else(|e| e.into_inner()) = found;
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn reads_the_switches_and_skips_the_rest() {
++        let q = Qol::parse("sprint=true\nxray = 1\nfly=true\nnonsense\n");
++        assert_eq!(q, Qol { sprint: true, xray: true });
++        assert_eq!(Qol::parse("sprint=false\n"), OFF);
++    }
++}
