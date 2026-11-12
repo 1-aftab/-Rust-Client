@@ -83,7 +83,7 @@ HUD_END = '''    let rc = m::rc_place(|key| game.native_setting(m::ID, key));
 }
 '''
 
-MAP_OFF = "    horizon_client::extras_hud::minimap_coordinates::OUTLINE.with(|s| s.set((0, false)));\n"
+MAP_OFF = "    use horizon_client::extras::Corner;\n"
 MAP_SETTINGS = "    let settings = m::settings(|key| game.native_setting(m::ID, key));\n"
 MAP_AT = '''    let rc = m::rc_place(|key| game.native_setting(m::ID, key));
     horizon_client::extras_hud::MINIMAP_AT
