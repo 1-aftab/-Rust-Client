@@ -1,0 +1,15 @@
+# The mods compiled into the Rust Edition engine of every APK: one registry id a line, with the
+# version it is pinned to (https://github.com/horizon-rust/horizon-mods, mods/<id>.toml).
+# Each can be switched off in the game under Options > Mods. The mod compiler
+# (.github/workflows/native-mods.yml) adds these to every build it makes, so a requested build
+# keeps them. All are MIT or BSD-3-Clause; see RustEngine/NOTICE.md.
+zoom@2.0.0
+minimap@2.0.0
+recipes@2.0.0
+fps_overlay@2.0.0
+keystrokes@2.0.0
+appleskin@0.1.3
+eatinganimation@0.2.0
+fullbright_horizon@1.0.0
+basic_hud@0.5.0
+mousetweaks@1.1.0

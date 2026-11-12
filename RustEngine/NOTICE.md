@@ -33,3 +33,11 @@ included.
 
 MIT code may be combined into a GPL-3.0 work. The combined APK is distributed under GPL-3.0;
 Starling's files keep their MIT notice, reproduced in the files listed above.
+
+## Built-in mods
+
+The engine of the APK is compiled with the mods listed in `tools/builtin-mods.txt`, fetched at
+build time from the mod registry https://github.com/horizon-rust/horizon-mods, where each
+mod's page names its authors, source and licence: Zoom, Minimap, Recipes, FPS Counter and
+Keystrokes (Horizon's official mods, MIT), AppleSkin (MIT), Eating Animation (MIT), Fullbright
+(MIT), The Basic HUD (MIT) and MouseTweaks (BSD-3-Clause). They are unmodified.
