@@ -1,0 +1,26 @@
+diff --git a/crates/horizon-client/src/game/native_builds.rs b/crates/horizon-client/src/game/native_builds.rs
+index 7ff7222..8bc8b31 100644
+--- a/crates/horizon-client/src/game/native_builds.rs
++++ b/crates/horizon-client/src/game/native_builds.rs
+@@ -63,5 +63,8 @@ const ID: &str = "starling-native-builds";
+ // The hosted build service and prebuilt libraries currently target ARM64 only.
+-const SERVICE_SUPPORTED: bool = cfg!(target_arch = "aarch64");
++// Rust Client: no mod is compiled for a player. The mods of this game are the ones built into
++// it (RustEngine/tools/builtin-mods.txt of the launcher), so the build service, its card and
++// the Compile buttons are off everywhere.
++const SERVICE_SUPPORTED: bool = false;
+ fn unsupported() -> String {
+-    horizon_client::lang::tr("starling.native_builds.arm64_only", &[])
++    "This mod is not one of the mods built into this game, so it does nothing here.".to_owned()
+ }
+diff --git a/crates/starling-catalog/src/lib.rs b/crates/starling-catalog/src/lib.rs
+index aeeab26..f56b514 100644
+--- a/crates/starling-catalog/src/lib.rs
++++ b/crates/starling-catalog/src/lib.rs
+@@ -29,3 +29,5 @@ const USER_AGENT: &str = "starling-client/starling (github.com/starling-client/s
+ /// The build service makes ARM64 libraries only, so a native mod would stay unbuilt elsewhere.
+-const NATIVE_MODS_BUILD: bool = cfg!(any(target_arch = "aarch64", not(target_os = "android")));
++// Rust Client: never. Nothing compiles a native mod for a player, so the catalog does not
++// offer them (the built-in ones are already in the game).
++const NATIVE_MODS_BUILD: bool = false;
+ /// The largest shader pack the catalog downloads.

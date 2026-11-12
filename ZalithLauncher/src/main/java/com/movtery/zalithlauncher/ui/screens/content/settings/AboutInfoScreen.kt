@@ -37,7 +37,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -90,6 +94,9 @@ fun AboutInfoScreen(
         Triple(key, mainScreenKey, false),
         Triple(NormalNavKey.Settings.AboutInfo, settingsScreenKey, false)
     ) { isVisible ->
+        //Rust Client: the credits are folded away under one small entry
+        var showLicences by rememberSaveable { mutableStateOf(false) }
+
         AnimatedLazyColumn(
             modifier = Modifier.fillMaxSize(),
             isVisible = isVisible,
@@ -121,11 +128,67 @@ fun AboutInfoScreen(
                                 }
                             }
                         )
+                        Text(
+                            modifier = Modifier.padding(horizontal = 6.dp),
+                            text = stringResource(R.string.about_rust_client_motto),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            modifier = Modifier
+                                .padding(horizontal = 6.dp)
+                                .alpha(0.8f),
+                            text = stringResource(R.string.about_rust_client_story),
+                            style = MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
             }
 
             animatedItem { ctx ->
+                Surface(
+                    modifier = Modifier.animated(ctx),
+                    color = itemColor(),
+                    contentColor = onItemColor(),
+                    shape = MaterialTheme.shapes.large,
+                    onClick = { showLicences = !showLicences }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            modifier = Modifier.size(20.dp),
+                            painter = painterResource(R.drawable.ic_copyright_outlined),
+                            contentDescription = null
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.about_licences_title),
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                modifier = Modifier.alpha(0.7f),
+                                text = stringResource(R.string.about_licences_text),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Icon(
+                            modifier = Modifier.size(22.dp),
+                            painter = painterResource(
+                                if (showLicences) R.drawable.ic_arrow_drop_up_rounded
+                                else R.drawable.ic_arrow_drop_down_rounded
+                            ),
+                            contentDescription = null
+                        )
+                    }
+                }
+            }
+
+            if (showLicences) animatedItem { ctx ->
                 ChunkLayout(
                     modifier = Modifier.animated(ctx),
                     title = stringResource(R.string.about_acknowledgements_title)
@@ -133,6 +196,24 @@ fun AboutInfoScreen(
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         val launcherName = remember { launcherName() }
 
+                        LinkIconItem(
+                            icon = painterResource(R.drawable.img_launcher),
+                            title = "Zalith Launcher 2",
+                            text = stringResource(R.string.about_licences_zalith_text),
+                            openLink = { openLink("https://github.com/ZalithLauncher/ZalithLauncher2") }
+                        )
+                        LinkIconItem(
+                            icon = painterResource(R.drawable.img_launcher),
+                            title = "Starling",
+                            text = stringResource(R.string.about_licences_engine_text),
+                            openLink = { openLink("https://github.com/JuanLuci/starling") }
+                        )
+                        LinkIconItem(
+                            icon = painterResource(R.drawable.img_launcher),
+                            title = stringResource(R.string.about_licences_mods_title),
+                            text = stringResource(R.string.about_licences_mods_text),
+                            openLink = { openLink("https://github.com/horizon-rust/horizon-mods") }
+                        )
                         ButtonIconItem(
                             icon = painterResource(R.drawable.img_avatar_bangbang93),
                             title = "bangbang93",
@@ -190,7 +271,7 @@ fun AboutInfoScreen(
             }
 
             //额外依赖库板块
-            animatedItem { ctx ->
+            if (showLicences) animatedItem { ctx ->
                 ChunkLayout(
                     modifier = Modifier.animated(ctx),
                     title = stringResource(R.string.about_library_title)

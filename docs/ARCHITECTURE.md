@@ -249,39 +249,28 @@ In the Rust Edition's process the settings are read on every start and resume
 (`RustGameActivity`: `loadAllSettings`), and the layout editor opens as
 `RustControlEditorActivity`: the launcher's editor, translucent, in the game's process and task.
 
-## Rust Edition mods (the mod compiler)
+## Rust Edition mods
 
-The Rust engine has no mod loader. A Rust Edition mod (`.hnmod`, "native mod" in the catalog) is
-Rust source that has to be compiled into the game itself. Upstream does that on its own build
-server, which would send back a game without this launcher's patches, so Rust Client compiles
-its own, for free, on GitHub Actions in this repository:
-
-1. The player installs mods from the catalog and presses **Compile** on the Mods page.
-2. Patch `0009` (`game/native_builds.rs`, `request_build`) first looks in this repository's
-   `native-builds` release for a build of exactly those mods and downloads it if there is one.
-   Otherwise it opens a filled-in GitHub issue titled `[native build] <mods>` in the browser.
-3. `.github/workflows/native-mods.yml` reads the issue, fetches the engine as the APK's is
-   (`RustEngine/tools/build_engine.py --fetch-only`: `engine.lock` + `patches/`), fetches the
-   mods from the registry checked against its SHA-256 (`RustEngine/tools/native_mods.py`), runs
-   the engine's own `packaging/android/native_build.sh`, and uploads `v<version>__<ids>.so` and
-   `.json` to the release `native-builds`. The issue is answered and closed.
-4. Pressing Compile again downloads the build; it is used from the next start. The engine's own
-   safety checks stay: SHA-256, and a build is only loaded by the APK install it was fetched under.
-
-Limits: ARM64 only; the workflow runs on issues only once it is on the default branch; a build
-is made for one engine version, so every engine update needs new builds; a mod that does not
-compile against this engine version fails the build. The repository to ask is the constant
-`MOD_BUILDS` in `starling_releases.rs` (patch `0009`): a fork has to change it.
+The Rust engine has no mod loader: a Rust Edition mod is Rust source compiled into the game.
+Rust Client compiles nothing for a player. An earlier mod compiler (a GitHub Actions workflow
+answering requests from the game) was removed; the mods of the Rust Edition are the built-in
+ones below. Patch `0009` turns the engine's Compile card, its build service and the catalog's
+native mods off (`SERVICE_SUPPORTED`, `NATIVE_MODS_BUILD`).
 
 ## Built-in Rust Edition mods, gyroscope, CI storage
 
 - `RustEngine/tools/builtin-mods.txt` lists registry mods that are compiled into the engine of
   every APK (`build_engine.py` → `build_with_mods`, which runs upstream's `native_build.sh`).
-  They are switched on and off in the game under Options > Mods. The mod compiler adds the same
-  list to every build it makes and records them under `builtin` in the build's JSON, so that
-  `mods` still names only what was requested (the game matches builds by it).
+  They are switched on and off in the game under Options > Mods.
+- Free placement of mod HUDs: `RustEngine/tools/mod_tweaks.py` edits the fetched sources of the
+  FPS Counter, Keystrokes and the Minimap (exact text replacements in pinned versions), adding
+  "Position: Corner/Free", "Across" and "Down" to each one's settings page. The box is drawn in
+  its corner and then moved by engine patch `0010` (`extras_hud::place_free`, `MINIMAP_AT`).
+  HUD+ has its own drag-and-drop editor; the other built-in mods draw no free-standing box.
+- About screen: the credits are folded under the entry "Open-source licences"
+  (`AboutInfoScreen.kt`); they stay in the app because the licences require them.
 - Gyroscope aiming in the Rust Edition is the launcher's own (`GyroscopeReader`), fed to the
   engine as relative mouse movement in `RustControlsOverlay.kt` while the game holds the
   pointer. Its switch and sensitivity are also in the Rust game menu.
 - CI stores nothing as artifacts: APKs are uploaded to the release `latest-build`, and the
-  engine and the mod builds pass between jobs through `actions/cache`.
+  engine passes between jobs through `actions/cache`.
