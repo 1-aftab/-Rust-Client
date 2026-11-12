@@ -1,0 +1,64 @@
+name: Mod probe
+
+# Which mods of the Horizon mod registry fit the Rust Edition engine: each candidate of
+# RustEngine/probe/candidates.txt is mixed alone into the engine and type-checked. The answer
+# is a comment on the commit (one a shard). It makes no APK.
+on:
+  push:
+    paths:
+      - 'RustEngine/probe/**'
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Make room
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/share/swift \
+            /opt/hostedtoolcache/CodeQL /usr/local/share/boost /usr/local/share/powershell || true
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "25"
+
+      - name: Install the NDK upstream pins
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;28.2.13676358" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --version 3.5.4 --locked
+
+      - name: Fetch and patch the engine source
+        run: python3 RustEngine/tools/build_engine.py --fetch-only
+
+      - name: Probe
+        run: bash RustEngine/probe/probe_mods.sh ${{ matrix.shard }} 3 "$RUNNER_TEMP/results.txt"
+
+      - name: Report
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -s "$RUNNER_TEMP/results.txt" || echo "FAIL (all): no result" > "$RUNNER_TEMP/results.txt"
+          { echo "Mod probe, shard ${{ matrix.shard }}:"; echo '```'; cat "$RUNNER_TEMP/results.txt"; echo '```'; } > "$RUNNER_TEMP/body.txt"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" -F body=@"$RUNNER_TEMP/body.txt" > /dev/null
+          echo "::notice::$(grep -c '^OK' "$RUNNER_TEMP/results.txt") fit: $(grep '^OK' "$RUNNER_TEMP/results.txt" | cut -d' ' -f2 | tr '\n' ' ')"

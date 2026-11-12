@@ -77,15 +77,6 @@ index a9b81a8..974e8e3 100644
  pub mod extras_hud;
 +pub mod rc_qol;
  pub mod falling_block;
-diff --git a/crates/horizon-client/src/first_person.rs b/crates/horizon-client/src/first_person.rs
-index 078dd52..320b5a4 100644
---- a/crates/horizon-client/src/first_person.rs
-+++ b/crates/horizon-client/src/first_person.rs
-@@ -923,2 +923,4 @@ impl Clicks {
-     ) {
-+        // Rust Client, QOL: Trigger Bot's click.
-+        let attack_clicks = attack_clicks + crate::rc_qol::take_attack_clicks();
-         if self.right_click_delay > 0 {
 diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.rs
 index 08a44af..0f49e13 100644
 --- a/crates/horizon-client/src/game.rs
@@ -199,7 +190,7 @@ index 0000000..e6fb959
 +    }
 +}
 diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/src/game/remote.rs
-index 9376754..6861883 100644
+index 9376754..92e5564 100644
 --- a/crates/horizon-client/src/game/remote.rs
 +++ b/crates/horizon-client/src/game/remote.rs
 @@ -6311,2 +6311,4 @@ impl Game<'_> {
@@ -217,7 +208,14 @@ index 9376754..6861883 100644
 +            keys.sprint = true;
 +        }
          // A server's anticheat simulates Java's keys: eight directions at full speed. A stick's
-@@ -9455,2 +9464,13 @@ impl Game<'_> {
+@@ -9255,2 +9264,6 @@ impl Game<'_> {
+         }
++        // Rust Client, QOL: Trigger Bot's attack, the one a tap on a mob makes.
++        if horizon_client::rc_qol::take_attack_clicks() > 0 && self.using.is_none() {
++            self.remote_start_attack();
++        }
+         input.tick(&mut RemoteInputWorld(self, acts), attack, use_item);
+@@ -9455,2 +9468,13 @@ impl Game<'_> {
  
 +    /// Rust Client, QOL: whether the attack has charged (the cooldown is over).
 +    pub(super) fn rc_attack_ready(&mut self) -> bool {
@@ -233,7 +231,7 @@ index 9376754..6861883 100644
      /// An attribute's value on this client's player, if its map has the attribute.
 diff --git a/crates/horizon-client/src/rc_qol.rs b/crates/horizon-client/src/rc_qol.rs
 new file mode 100644
-index 0000000..033f219
+index 0000000..142df74
 --- /dev/null
 +++ b/crates/horizon-client/src/rc_qol.rs
 @@ -0,0 +1,163 @@
@@ -377,7 +375,7 @@ index 0000000..033f219
 +    *NOW.write().unwrap_or_else(|e| e.into_inner()) = Some(found);
 +}
 +
-+/// Trigger Bot's click: one attack click more for the hands' next tick.
++/// Trigger Bot's click: one attack for the next tick's input (`remote_handle_input`).
 +pub fn click_attack() {
 +    ATTACK_CLICKS.store(1, Ordering::Relaxed);
 +}
