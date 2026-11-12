@@ -36,11 +36,21 @@ class RustQol(gameFolder: File) {
         val suffix: String? = null
     ) : Row
 
+    /** The key that switches a feature while playing ([key] holds its name, nothing for none) */
+    data class KeyRow(override val key: String, override val label: String) : Row
+    data class KeyOption(val name: String, val label: String)
+
     private val file = File(gameFolder, FILE)
     private val values = mutableStateMapOf<String, String>()
 
     init {
+        reload()
+    }
+
+    /** Reads the file again: a feature's key, pressed in the game, switches it there */
+    fun reload() {
         runCatching {
+            values.clear()
             if (file.isFile) {
                 file.readLines().forEach { line ->
                     val at = line.indexOf('=')
@@ -74,6 +84,14 @@ class RustQol(gameFolder: File) {
         if (write) save()
     }
 
+    fun keyOf(row: KeyRow): KeyOption =
+        KEYS.firstOrNull { it.name == values[row.key].orEmpty() } ?: KEYS.first()
+
+    fun setKey(row: KeyRow, option: KeyOption) {
+        values[row.key] = option.name
+        save()
+    }
+
     /** Sets every switch of a section at once */
     fun setAll(section: Section, on: Boolean) {
         section.rows.filterIsInstance<Switch>().forEach { values[it.key] = on.toString() }
@@ -104,6 +122,12 @@ class RustQol(gameFolder: File) {
     companion object {
         const val FILE = "rust-client-qol.txt"
 
+        /** The keys a feature can be switched with, by the game's names for them */
+        val KEYS: List<KeyOption> = listOf(KeyOption("", "None")) +
+            ('a'..'z').map { KeyOption("key.keyboard.$it", it.uppercase()) } +
+            (1..12).map { KeyOption("key.keyboard.f$it", "F$it") } +
+            (0..9).map { KeyOption("key.keyboard.keypad.$it", "Numpad $it") }
+
         // The keys and what they start as are the engine's (rc_qol.rs: `Qol::off`, `XRAY_GROUPS`).
         val FEATURES: List<Feature> = listOf(
             Feature(
@@ -116,6 +140,10 @@ class RustQol(gameFolder: File) {
                 title = "X-Ray",
                 summary = "Draws only the blocks you choose",
                 sections = listOf(
+                    Section(
+                        "Shortcut",
+                        listOf(KeyRow("xray_key", "Key that switches X-Ray"))
+                    ),
                     Section(
                         "Look",
                         listOf(Switch("xray_bright", "Full brightness", true))
@@ -171,6 +199,10 @@ class RustQol(gameFolder: File) {
                 title = "Trigger Bot",
                 summary = "Attacks what your crosshair is on",
                 sections = listOf(
+                    Section(
+                        "Shortcut",
+                        listOf(KeyRow("trigger_key", "Key that switches Trigger Bot"))
+                    ),
                     Section(
                         "Targets",
                         listOf(

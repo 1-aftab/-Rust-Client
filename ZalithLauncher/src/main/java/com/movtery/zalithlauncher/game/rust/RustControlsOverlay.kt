@@ -384,6 +384,7 @@ private fun Overlay(
             onEditLayout = { current?.file?.let(onEditLayout) },
             onKeyboard = { adapter.keyboard() },
             qol = remember(context) { RustQol(RustEdition.gameFolder(context)) },
+            mods = remember(context) { RustMods(RustEdition.gameFolder(context)) },
             onMoveHud = {
                 adapter.releaseAll()
                 hudEditor = true
@@ -462,16 +463,20 @@ private fun GameMenu(
     onEditLayout: () -> Unit,
     onKeyboard: () -> Unit,
     qol: RustQol,
+    mods: RustMods,
     onMoveHud: () -> Unit,
     onQuit: () -> Unit
 ) {
     // the "QOL" page takes the menu's place while it is open
     var qolPage by remember { mutableStateOf(false) }
+    var modsPage by remember { mutableStateOf(false) }
     MenuSubscreen(
         state = state,
         closeScreen = close
     ) {
-        if (qolPage) {
+        if (modsPage) {
+            ModsPage(mods = mods, onBack = { modsPage = false })
+        } else if (qolPage) {
             QolPage(qol = qol, onBack = { qolPage = false })
         } else {
         Text(
@@ -528,6 +533,13 @@ private fun GameMenu(
                     modifier = Modifier.fillMaxWidth(),
                     text = "QOL",
                     onClick = { qolPage = true }
+                )
+            }
+            item {
+                MenuTextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = "Mods",
+                    onClick = { modsPage = true }
                 )
             }
             item {
@@ -656,6 +668,78 @@ private fun GameMenu(
 }
 
 /**
+ * The game menu's "Mods" page: the built-in mods by category. A category has a switch for all
+ * of its mods and opens to show them, each with its own switch. Everything starts off.
+ */
+@Composable
+private fun ModsPage(mods: RustMods, onBack: () -> Unit) {
+    var open by remember { mutableStateOf(setOf<String>()) }
+    // the game's own Options > Mods page may have changed the file
+    LaunchedEffect(Unit) { mods.reload() }
+    Text(
+        modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
+        text = "Mods",
+        style = MaterialTheme.typography.titleMedium
+    )
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(all = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            MenuTextButton(
+                modifier = Modifier.fillMaxWidth(),
+                text = "< Back",
+                onClick = onBack
+            )
+        }
+        item {
+            MenuTextButton(
+                modifier = Modifier.fillMaxWidth(),
+                text = "Turn every mod off",
+                onClick = { mods.allOff() }
+            )
+        }
+        RustMods.CATEGORIES.forEach { category ->
+            val shown = category.title in open
+            item {
+                QolHeading(
+                    title = category.title,
+                    note = "${mods.countOn(category)} of ${category.mods.size} on"
+                )
+            }
+            item {
+                MenuSwitchButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = "All ${category.title} mods",
+                    switch = mods.countOn(category) > 0,
+                    onSwitch = { mods.setAll(category, it) }
+                )
+            }
+            item {
+                MenuTextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = if (shown) "Hide the mods  ^" else "Show the mods  v",
+                    onClick = { open = if (shown) open - category.title else open + category.title }
+                )
+            }
+            if (shown) {
+                category.mods.forEach { mod ->
+                    item {
+                        MenuSwitchButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            text = "${mod.name}: ${mod.about}",
+                            switch = mods.isOn(mod),
+                            onSwitch = { mods.setOn(mod, it) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
  * The game menu's "QOL" page: the features, each with its switch, and behind "Options" a
  * feature's own page with its choices in sections.
  */
@@ -663,6 +747,8 @@ private fun GameMenu(
 private fun QolPage(qol: RustQol, onBack: () -> Unit) {
     var open by remember { mutableStateOf<RustQol.Feature?>(null) }
     val feature = open
+    // a feature's key may have switched it in the game since the page was last shown
+    LaunchedEffect(Unit) { qol.reload() }
     Text(
         modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
         text = if (feature == null) "QOL" else "QOL  >  ${feature.title}",
@@ -731,6 +817,14 @@ private fun QolPage(qol: RustQol, onBack: () -> Unit) {
                                 text = row.label,
                                 switch = qol.isOn(row),
                                 onSwitch = { qol.setOn(row, it) }
+                            )
+                            is RustQol.KeyRow -> MenuListLayout(
+                                modifier = Modifier.fillMaxWidth(),
+                                title = row.label,
+                                items = RustQol.KEYS,
+                                currentItem = qol.keyOf(row),
+                                onItemChange = { qol.setKey(row, it) },
+                                getItemText = { it.label }
                             )
                             is RustQol.Slider -> MenuSliderLayout(
                                 modifier = Modifier.fillMaxWidth(),

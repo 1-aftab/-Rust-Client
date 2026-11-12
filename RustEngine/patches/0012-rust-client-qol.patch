@@ -69,6 +69,33 @@ index a5aff35..15240fb 100644
 +            }
 +        }
          let pad = &scratch.padded;
+diff --git a/crates/horizon-client-render/src/mod_list.rs b/crates/horizon-client-render/src/mod_list.rs
+index 1326627..cbc52e7 100644
+--- a/crates/horizon-client-render/src/mod_list.rs
++++ b/crates/horizon-client-render/src/mod_list.rs
+@@ -159,7 +159,4 @@ impl ModList {
+             m.dev
+-                || if m.native.is_some() {
+-                    !self.disabled.contains(&m.id)
+-                } else {
+-                    self.enabled.contains(&m.id)
+-                }
++                // Rust Client: a native mod too is off until the player turns it on.
++                || self.enabled.contains(&m.id)
+         })
+@@ -174,7 +171,8 @@ impl ModList {
+         if m.native.is_some() {
+-            if self.disabled.remove(&m.id) {
+-                self.enabled.insert(m.id.clone());
+-            } else {
+-                self.enabled.remove(&m.id);
++            // Rust Client: on only with a `true` line.
++            if self.enabled.remove(&m.id) {
+                 self.disabled.insert(m.id.clone());
++            } else {
++                self.disabled.remove(&m.id);
++                self.enabled.insert(m.id.clone());
+             }
 diff --git a/crates/horizon-client/src/client_lib.rs b/crates/horizon-client/src/client_lib.rs
 index a9b81a8..974e8e3 100644
 --- a/crates/horizon-client/src/client_lib.rs
@@ -78,32 +105,58 @@ index a9b81a8..974e8e3 100644
 +pub mod rc_qol;
  pub mod falling_block;
 diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.rs
-index 08a44af..0f49e13 100644
+index 08a44af..0b301c3 100644
 --- a/crates/horizon-client/src/game.rs
 +++ b/crates/horizon-client/src/game.rs
 @@ -292,2 +292,3 @@ mod quick_actions;
  mod raids;
 +mod rc_qol;
  mod ram_limit;
+@@ -7411,2 +7412,4 @@ impl Game<'_> {
+         self.block_reach = self.interaction_range("minecraft:block_interaction_range", 4.5, 5.0);
++        // Rust Client: which mods are on, as the launcher's Mods page last wrote it.
++        self.rc_reload_mods();
+         self.tick_debug_keys()?;
+diff --git a/crates/horizon-client/src/game/native_hooks.rs b/crates/horizon-client/src/game/native_hooks.rs
+index 37ef4d3..c8fa29b 100644
+--- a/crates/horizon-client/src/game/native_hooks.rs
++++ b/crates/horizon-client/src/game/native_hooks.rs
+@@ -7738,3 +7738,4 @@ impl Game<'_> {
+     pub(super) fn native_on(&self, mod_id: &str) -> bool {
+-        !self.settings.mods.disabled.contains(mod_id)
++        // Rust Client: every built-in mod rests until the player turns it on.
++        self.settings.mods.enabled.contains(mod_id)
+     }
+@@ -9371,2 +9372,6 @@ impl Game<'_> {
+                 self.native_panel_key(name);
++                // Rust Client, QOL: the keys that switch X-Ray and Trigger Bot, while playing.
++                if self.screen == Screen::Playing {
++                    horizon_client::rc_qol::key_pressed(name);
++                }
+             }
 diff --git a/crates/horizon-client/src/game/rc_qol.rs b/crates/horizon-client/src/game/rc_qol.rs
 new file mode 100644
-index 0000000..e6fb959
+index 0000000..4323e88
 --- /dev/null
 +++ b/crates/horizon-client/src/game/rc_qol.rs
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,124 @@
 +//! Rust Client: the quality-of-life switches at work in the game (`horizon_client::rc_qol`
 +//! has the switches themselves). Sprint is with the keys in `game/remote.rs`; X-Ray is in
 +//! the section mesher, and here every section is meshed again when it changes; Trigger Bot
 +//! is here.
 +use super::{Game, Screen};
-+use horizon_client::{mesher, rc_qol};
++use horizon_client::{mesher, mod_list, rc_qol};
 +use std::cell::Cell;
++use std::time::SystemTime;
 +use std::sync::atomic::Ordering;
 +
 +thread_local! {
 +    /// Ticks the crosshair has been on a target, and the ticks it has to be this time.
 +    static ON_TARGET: Cell<(u32, u32)> = const { Cell::new((0, 0)) };
 +    static RANDOM: Cell<u32> = const { Cell::new(0x2545_F491) };
++    /// Ticks counted, and when the mods' file was last written as far as it was read.
++    static AGE: Cell<u32> = const { Cell::new(0) };
++    static MODS_READ: Cell<Option<SystemTime>> = const { Cell::new(None) };
 +}
 +
 +/// A number below `n` (xorshift; nothing depends on its quality).
@@ -129,6 +182,28 @@ index 0000000..e6fb959
 +        }
 +        if q.trigger {
 +            self.rc_trigger(q);
++        }
++    }
++
++    /// The launcher's Mods page writes which mods are on into the game's own file
++    /// (`horizon-mods.txt`): what it says is taken when the file changes, so a switch there
++    /// acts in the running game.
++    pub(super) fn rc_reload_mods(&mut self) {
++        if AGE.with(|a| a.replace(a.get().wrapping_add(1))) % 10 != 0 {
++            return;
++        }
++        let dir = Self::game_dir();
++        let written = std::fs::metadata(dir.join(mod_list::FILE))
++            .and_then(|m| m.modified())
++            .ok();
++        if written.is_none() || MODS_READ.with(|r| r.replace(written)) == written {
++            return;
++        }
++        let fresh = mod_list::ModList::load(&dir);
++        let mods = &mut self.settings.mods;
++        if fresh.enabled != mods.enabled || fresh.disabled != mods.disabled {
++            mods.enabled = fresh.enabled;
++            mods.disabled = fresh.disabled;
 +        }
 +    }
 +
@@ -229,12 +304,21 @@ index 9376754..92e5564 100644
 +        self.remote.as_ref().map(|r| r.entity_id)
 +    }
      /// An attribute's value on this client's player, if its map has the attribute.
+diff --git a/crates/horizon-client/src/game/shader_packs.rs b/crates/horizon-client/src/game/shader_packs.rs
+index de665ba..7f575e3 100644
+--- a/crates/horizon-client/src/game/shader_packs.rs
++++ b/crates/horizon-client/src/game/shader_packs.rs
+@@ -111,3 +111,3 @@ fn active_pack<'a>(picked: &'a str, mods: &horizon_client::mod_list::ModList) ->
+             .iter()
+-            .any(|m| m.id == id && m.native.is_some() && mods.disabled.contains(id))
++            .any(|m| m.id == id && m.native.is_some() && !mods.enabled.contains(id))
+     }) {
 diff --git a/crates/horizon-client/src/rc_qol.rs b/crates/horizon-client/src/rc_qol.rs
 new file mode 100644
-index 0000000..142df74
+index 0000000..7d9b343
 --- /dev/null
 +++ b/crates/horizon-client/src/rc_qol.rs
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,209 @@
 +//! Rust Client: the quality-of-life switches. The launcher's "QOL" page writes them to
 +//! `rust-client-qol.txt` in the game folder (`key=value` lines); the game reads the file
 +//! again twice a second, so a switch acts at once. Everything is off without the file.
@@ -359,6 +443,53 @@ index 0000000..142df74
 +
 +static NOW: RwLock<Option<Qol>> = RwLock::new(None);
 +static CALLS: AtomicU32 = AtomicU32::new(0);
++/// The keys that switch X-Ray and Trigger Bot (`xray_key`, `trigger_key`: a vanilla key name
++/// like `key.keyboard.x`, or nothing for no key).
++static KEYS: RwLock<(String, String)> = RwLock::new((String::new(), String::new()));
++
++/// The value of `name` in the file's text.
++fn value_of<'a>(text: &'a str, name: &str) -> &'a str {
++    text.lines()
++        .filter_map(|l| l.split_once('='))
++        .find(|(k, _)| k.trim() == name)
++        .map_or("", |(_, v)| v.trim())
++}
++
++/// Takes the file's text as the switches of now.
++fn take(text: &str) {
++    *NOW.write().unwrap_or_else(|e| e.into_inner()) = Some(Qol::parse(text));
++    *KEYS.write().unwrap_or_else(|e| e.into_inner()) = (
++        value_of(text, "xray_key").to_owned(),
++        value_of(text, "trigger_key").to_owned(),
++    );
++}
++
++/// A key went down while playing: X-Ray's or Trigger Bot's key switches it, in the file too
++/// (the launcher's page shows the file). Whether it was one of them.
++pub fn key_pressed(key: &str) -> bool {
++    let name = {
++        let keys = KEYS.read().unwrap_or_else(|e| e.into_inner());
++        if !keys.0.is_empty() && keys.0 == key {
++            "xray"
++        } else if !keys.1.is_empty() && keys.1 == key {
++            "trigger"
++        } else {
++            return false;
++        }
++    };
++    let now = get();
++    let on = !(if name == "xray" { now.xray } else { now.trigger });
++    let old = std::fs::read_to_string(FILE).unwrap_or_default();
++    let mut text: String = old
++        .lines()
++        .filter(|l| l.split_once('=').is_none_or(|(k, _)| k.trim() != name))
++        .map(|l| format!("{l}\n"))
++        .collect();
++    text.push_str(&format!("{name}={on}\n"));
++    let _ = std::fs::write(FILE, &text);
++    take(&text);
++    true
++}
 +static ATTACK_CLICKS: AtomicU32 = AtomicU32::new(0);
 +
 +/// The switches as they are now.
@@ -371,8 +502,7 @@ index 0000000..142df74
 +    if CALLS.fetch_add(1, Ordering::Relaxed) % 10 != 0 {
 +        return;
 +    }
-+    let found = std::fs::read_to_string(FILE).map_or_else(|_| Qol::off(), |text| Qol::parse(&text));
-+    *NOW.write().unwrap_or_else(|e| e.into_inner()) = Some(found);
++    take(&std::fs::read_to_string(FILE).unwrap_or_default());
 +}
 +
 +/// Trigger Bot's click: one attack for the next tick's input (`remote_handle_input`).
