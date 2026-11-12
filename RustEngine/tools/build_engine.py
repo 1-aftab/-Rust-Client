@@ -209,7 +209,7 @@ def build_with_mods(mods, profile, abi, sdk):
     out.mkdir(parents=True)
     run(sys.executable, MODULE / "tools" / "native_mods.py", " ".join(mods), bundles)
     paths = (bundles / "bundles.txt").read_text().split("\n")
-    env = dict(os.environ, PROFILE=profile, ABI=abi, NATIVE_LIBRARY_ONLY="1")
+    env = dict(os.environ, PROFILE=profile, ABI=abi, NATIVE_LIBRARY_ONLY="1", CARGO_TERM_COLOR="never")
     log = work / "build.log"
     with log.open("wb") as sink:
         build = subprocess.Popen(
@@ -222,9 +222,14 @@ def build_with_mods(mods, profile, abi, sdk):
             sink.write(line)
     if build.wait() != 0:
         # What failed, where a workflow's annotations show it (the log is long).
-        text = log.read_text(errors="replace").splitlines()
-        errors = [l for l in text if l.startswith(("error", "native_build:", "horizon-mixins")) or "-->" in l]
-        print("::error::built-in mods: " + " | ".join(errors[:14])[:3500])
+        import re
+        text = re.sub(r"\x1b\[[0-9;]*m", "", log.read_text(errors="replace")).splitlines()
+        errors = []
+        for at, line in enumerate(text):
+            if line.startswith("error") and not line.startswith("error: could not compile"):
+                where = next((l.strip() for l in text[at + 1:at + 4] if "-->" in l), "")
+                errors.append(f"{line.strip()} {where}")
+        print(f"::error::built-in mods, {len(errors)} errors: " + " || ".join(errors[:25])[:3800])
         print("::error::last lines: " + " | ".join(text[-8:])[:3500])
         sys.exit("build_engine: the engine did not build with the built-in mods")
     return out / "libhorizon_android.so"
