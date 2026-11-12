@@ -218,13 +218,13 @@ jobs:
           mv "$RUNNER_TEMP/out/build.json" "$RUNNER_TEMP/out/$NAME.json"
           ls -l "$RUNNER_TEMP/out"
 
-      - name: Upload the build
-        uses: actions/upload-artifact@v7
+      # Handed to the publish job through the cache, not an artifact (artifact storage is limited).
+      - name: Hand the build over
+        uses: actions/cache/save@v4
         with:
-          name: native-build
           path: ${{ runner.temp }}/out
-          if-no-files-found: error
-          retention-days: 3
+          key: native-build-${{ github.run_id }}-${{ github.run_attempt }}
+          enableCrossOsArchive: true
 
   publish:
     needs: [request, build]
@@ -243,15 +243,18 @@ jobs:
     steps:
       - name: Download the build
         if: needs.build.result == 'success'
-        uses: actions/download-artifact@v8
+        uses: actions/cache/restore@v4
         with:
-          name: native-build
-          path: out
+          path: ${{ runner.temp }}/out
+          key: native-build-${{ github.run_id }}-${{ github.run_attempt }}
+          enableCrossOsArchive: true
+          fail-on-cache-miss: true
 
       - name: Publish
         if: needs.build.result == 'success'
         run: |
           # Only the two files of this request, whatever the build job made.
+          cd "$RUNNER_TEMP"
           test -f "out/$NAME.so" && test -f "out/$NAME.json"
           python3 -c "import json,sys; json.load(open(sys.argv[1]))" "out/$NAME.json"
           gh release view native-builds >/dev/null 2>&1 || gh release create native-builds \

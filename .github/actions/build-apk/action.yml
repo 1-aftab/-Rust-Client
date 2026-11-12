@@ -8,6 +8,10 @@ inputs:
   variant:
     description: "Debug or Release"
     required: true
+  token:
+    description: "Token that may write releases: the APK is published to the release 'latest-build'"
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -72,6 +76,7 @@ runs:
       with:
         name: release apk (${{ inputs.arch }})
         path: ZalithLauncher/build/outputs/apk/release/*.apk
+        retention-days: 1
 
     - name: Upload Release Mapping for ${{ inputs.arch }}
       if: inputs.variant == 'Release'
@@ -80,11 +85,29 @@ runs:
       with:
         name: mapping (${{ inputs.arch }})
         path: ZalithLauncher/build/outputs/mapping/release/mapping.txt
+        retention-days: 1
 
-    - name: Upload Debug APK for ${{ inputs.arch }}
-      if: inputs.variant == 'Debug'
-      continue-on-error: true
-      uses: actions/upload-artifact@v7
-      with:
-        name: debug apk (${{ inputs.arch }})
-        path: ZalithLauncher/build/outputs/apk/debug/*.apk
+    # APKs go to a release, not to artifacts: artifact storage has a small quota and every push
+    # made five large ones. A release's files don't count against it. The release "latest-build"
+    # always holds the newest build of each architecture (older ones are replaced).
+    - name: Publish the APK to the release "latest-build"
+      if: inputs.token != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        GH_REPO: ${{ github.repository }}
+        ARCH: ${{ inputs.arch }}
+        VARIANT: ${{ inputs.variant }}
+        BRANCH: ${{ github.ref_name }}
+      run: |
+        kind=$(echo "$VARIANT" | tr '[:upper:]' '[:lower:]')
+        apk=$(ls ZalithLauncher/build/outputs/apk/$kind/*.apk | head -1)
+        name="RustClient-$ARCH-$kind.apk"
+        cp "$apk" "$RUNNER_TEMP/$name"
+        gh release view latest-build >/dev/null 2>&1 || gh release create latest-build \
+          --prerelease --latest=false --target "$GITHUB_SHA" --title "Latest build" \
+          --notes "The newest APKs built by CI. On a phone take RustClient-arm64 (it has the Rust Edition)." \
+          || gh release view latest-build >/dev/null
+        gh release upload latest-build "$RUNNER_TEMP/$name" --clobber
+        gh release edit latest-build --notes "The newest APKs built by CI. On a phone take RustClient-arm64 (it has the Rust Edition). Last build: ${GITHUB_SHA::7} ($BRANCH), $(date -u +'%Y-%m-%d %H:%M') UTC." || true
+        echo "::notice::$name is at $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/latest-build"

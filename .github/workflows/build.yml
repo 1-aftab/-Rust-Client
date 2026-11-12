@@ -92,16 +92,16 @@ jobs:
         if: steps.prebuilt.outputs.cache-hit != 'true'
         run: python3 RustEngine/tools/build_engine.py --abi "$ENGINE_ABI" --profile "$ENGINE_PROFILE"
 
-      - name: Upload the engine
-        uses: actions/upload-artifact@v7
-        with:
-          name: rust-engine
-          path: RustEngine/prebuilt
-          if-no-files-found: error
+      # No artifact: the account's artifact storage is limited. The cache step above saves
+      # RustEngine/prebuilt when this job ends, and build-rust restores it by the same key.
+      - name: Check the engine
+        run: test -f RustEngine/prebuilt/engine.json
 
   build:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
       matrix:
         arch: ["arm", "x86", "x86_64"]
@@ -124,11 +124,14 @@ jobs:
         with:
           arch: ${{ matrix.arch }}
           variant: ${{ inputs.variant }}
+          token: ${{ github.token }}
 
   build-rust:
     needs: engine
     if: ${{ !cancelled() && github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
       matrix:
         arch: ["all", "arm64"]
@@ -146,12 +149,12 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Download the engine
+      - name: Restore the built engine
         continue-on-error: true
-        uses: actions/download-artifact@v8
+        uses: actions/cache/restore@v4
         with:
-          name: rust-engine
           path: RustEngine/prebuilt
+          key: rust-engine-arm64-v8a-quick-${{ hashFiles('RustEngine/engine.lock', 'RustEngine/patches/**', 'RustEngine/tools/**') }}
 
       - name: Show the engine
         run: |
@@ -167,3 +170,4 @@ jobs:
         with:
           arch: ${{ matrix.arch }}
           variant: ${{ inputs.variant }}
+          token: ${{ github.token }}
