@@ -239,8 +239,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--abi", default="arm64-v8a",
                         choices=("arm64-v8a", "armeabi-v7a", "x86", "x86_64"))
-    parser.add_argument("--profile", default="quick",
-                        help="Cargo profile of upstream: quick (default), fast or release")
+    parser.add_argument("--profile", default="fast",
+                        help="Cargo profile of upstream: fast (default, what its releases use), quick or release")
     parser.add_argument("--fetch-only", action="store_true",
                         help="fetch and patch the source, build nothing")
     args = parser.parse_args()

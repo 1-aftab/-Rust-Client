@@ -57,7 +57,7 @@ android {
  * Needs: git, python3, a Rust toolchain with the Android target, cargo-ndk, the Android NDK
  * (ANDROID_NDK_HOME) and JDK 25 on the PATH (the engine compiles its data exporters with it).
  *
- *   ./gradlew :RustEngine:buildRustEngine                    # arm64-v8a, the "quick" profile
+ *   ./gradlew :RustEngine:buildRustEngine                    # arm64-v8a, the "fast" profile
  *   ./gradlew :RustEngine:buildRustEngine -PrustEngineProfile=fast
  */
 tasks.register<Exec>("buildRustEngine") {
@@ -67,6 +67,6 @@ tasks.register<Exec>("buildRustEngine") {
     commandLine(
         "python3", "tools/build_engine.py",
         "--abi", (findProperty("rustEngineAbi") as String?) ?: "arm64-v8a",
-        "--profile", (findProperty("rustEngineProfile") as String?) ?: "quick",
+        "--profile", (findProperty("rustEngineProfile") as String?) ?: "fast",
     )
 }

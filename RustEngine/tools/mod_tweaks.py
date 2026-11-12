@@ -2,14 +2,16 @@
 """Rust Client's changes to the built-in mods' sources, made after they are fetched.
 
 Free placement: the FPS Counter, Keystrokes and the Minimap can only sit in one of four corners.
-Each gets three more buttons on its settings page (Options > Mods > the mod > Settings):
-"Position: Corner/Free", "Across: N%" and "Down: N%". With Free, the box is drawn where it was
-and then moved (engine patch 0010: `extras_hud::place_free`, `MINIMAP_AT`), so the mods' own
-drawing code is untouched. The values are kept in the mod's settings folder as `rc_free`,
-`rc_across` and `rc_down`.
+Here each becomes a box the player drags anywhere on the screen, with the launcher's "Move HUD"
+screen (game menu of the Rust Edition; RustHudEditor.kt). The box is drawn where it was and then
+moved (engine patch 0010: `extras_hud::FreeHud`, `MINIMAP_AT`), so the mods' own drawing code is
+untouched. The place is kept in the mod's settings folder as `rc_place`, and where the box was
+drawn is told to the launcher in `rc_box`. Each settings page (Options > Mods > the mod >
+Settings) also gets three buttons: "Position: Corner/Free", "Across: N%" and "Down: N%".
 
 Every change is an exact text replacement in a pinned version of the mod; a text that is no
 longer there stops the build, so a new version of a mod cannot be mis-patched silently.
+Test changes against the pinned versions' sources, not the head of horizon-mods.
 """
 import pathlib
 import sys
@@ -17,77 +19,48 @@ import sys
 PLACE = '''
 // Rust Client: free placement (RustEngine/tools/mod_tweaks.py of the launcher).
 thread_local! {
-    static RC_PLACE: std::cell::Cell<Option<(bool, u8, u8)>> = const { std::cell::Cell::new(None) };
-}
-/// (free, across %, down %), read once through `get`, then kept.
-pub fn rc_place(get: impl Fn(&str) -> Option<String>) -> (bool, u8, u8) {
-    RC_PLACE.with(|p| {
-        let found = p.get().unwrap_or_else(|| {
-            let number = |key: &str, default: u8| {
-                get(key)
-                    .and_then(|v| v.trim().parse::<u8>().ok())
-                    .map_or(default, |v| v.min(100))
-            };
-            (
-                get("rc_free").is_some_and(|v| v.trim() == "true"),
-                number("rc_across", RC_ACROSS),
-                number("rc_down", RC_DOWN),
-            )
-        });
-        p.set(Some(found));
-        found
-    })
-}
-pub fn rc_set_place(place: (bool, u8, u8)) {
-    RC_PLACE.with(|p| p.set(Some(place)));
-}
-pub fn rc_labels(place: (bool, u8, u8)) -> [String; 3] {
-    [
-        format!("Position: {}", if place.0 { "Free" } else { "Corner" }),
-        format!("Across: {}%", place.1),
-        format!("Down: {}%", place.2),
-    ]
-}
-/// Button `i` of the three: Free on or off, then 5% further across or down (round to 0).
-pub fn rc_click(place: (bool, u8, u8), i: usize) -> (bool, u8, u8) {
-    let step = |v: u8| if v >= 100 { 0 } else { v + 5 };
-    match i {
-        0 => (!place.0, place.1, place.2),
-        1 => (place.0, step(place.1), place.2),
-        2 => (place.0, place.1, step(place.2)),
-        _ => place,
-    }
+    pub static RC: horizon_client::extras_hud::FreeHud =
+        const { horizon_client::extras_hud::FreeHud::new(RC_ACROSS, RC_DOWN) };
 }
 '''
 
 PAGE = "    buttons.extend(m::settings(|key| game.native_setting(m::ID, key)).labels());\n"
-PAGE_MORE = "    buttons.extend(m::rc_labels(m::rc_place(|key| game.native_setting(m::ID, key))));\n"
+PAGE_MORE = "    buttons.extend(m::RC.with(|rc| rc.place(|key| game.native_setting(m::ID, key))).labels());\n"
 
 CLICK = "    let mut settings = m::settings(|key| game.native_setting(m::ID, key));\n    settings.click(button);\n"
 CLICK_FIRST = '''    let rc_first = m::settings(|key| game.native_setting(m::ID, key)).labels().len();
     if button >= rc_first {
-        let place = m::rc_click(m::rc_place(|key| game.native_setting(m::ID, key)), button - rc_first);
-        m::rc_set_place(place);
-        game.native_set_setting(m::ID, "rc_free", if place.0 { "true" } else { "false" });
-        game.native_set_setting(m::ID, "rc_across", &place.1.to_string());
-        game.native_set_setting(m::ID, "rc_down", &place.2.to_string());
+        m::RC.with(|rc| {
+            let place = rc.place(|key| game.native_setting(m::ID, key)).click(button - rc_first);
+            rc.set(place, |key, value| game.native_set_setting(m::ID, key, value));
+        });
         return;
     }
 '''
 
 HUD_START = "    use horizon_client::extras::Corner;\n"
-HUD_END = '''    let rc = m::rc_place(|key| game.native_setting(m::ID, key));
-    if rc.0 {
-        horizon_client::extras_hud::place_free(batch, corners, rc_start, f32::from(rc.1) / 100.0, f32::from(rc.2) / 100.0);
-    }
+HUD_END = '''    m::RC.with(|rc| {
+        rc.settle(
+            batch,
+            corners,
+            rc_start,
+            |key| game.native_setting(m::ID, key),
+            |key, value| game.native_set_setting(m::ID, key, value),
+        )
+    });
 }
 '''
 
 MAP_OFF = "    use horizon_client::extras::Corner;\n"
 MAP_SETTINGS = "    let settings = m::settings(|key| game.native_setting(m::ID, key));\n"
-MAP_AT = '''    let rc = m::rc_place(|key| game.native_setting(m::ID, key));
-    horizon_client::extras_hud::MINIMAP_AT
-        .with(|at| at.set(rc.0.then(|| (f32::from(rc.1) / 100.0, f32::from(rc.2) / 100.0))));
+MAP_AT = '''    m::RC.with(|rc| {
+        let place = rc.place(|key| game.native_setting(m::ID, key));
+        horizon_client::extras_hud::MINIMAP_AT
+            .with(|at| at.set(place.free.then(|| (place.across / 100.0, place.down / 100.0))));
+        if let Some(drawn) = horizon_client::extras_hud::MINIMAP_BOX.with(|b| b.get()) {
+            rc.tell(drawn, |key, value| game.native_set_setting(m::ID, key, value));
+        }
+    });
 '''
 
 
@@ -112,7 +85,7 @@ def free_placement(bundle, across, down, hud=None, minimap=None):
     runtime = bundle / "runtime.rs"
     runtime.write_text(
         runtime.read_text(encoding="utf-8")
-        + f"\nconst RC_ACROSS: u8 = {across};\nconst RC_DOWN: u8 = {down};\n" + PLACE,
+        + f"\nconst RC_ACROSS: f32 = {across:.1f};\nconst RC_DOWN: f32 = {down:.1f};\n" + PLACE,
         encoding="utf-8")
     replace(bundle / "settings.rs", PAGE, PAGE + PAGE_MORE)
     replace(bundle / "click.rs", CLICK, CLICK_FIRST + CLICK)

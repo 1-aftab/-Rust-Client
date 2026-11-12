@@ -33,6 +33,14 @@
     <string name="rust_edition_version">Minecraft %1$s · Native</string>
     <string name="rust_edition_problem_not_included">This build does not contain the Rust Edition engine. It is only part of the ARM64 (arm64-v8a) and universal APKs.</string>
     <string name="rust_edition_problem_no_vulkan">The Rust Edition needs Vulkan 1.3, which this device does not provide. Java Edition is not affected.</string>
+    <string name="rust_hud_editor_title">Move HUD</string>
+    <string name="rust_hud_editor_hint">Drag a frame to put that HUD anywhere on the screen. It stays there.</string>
+    <string name="rust_hud_editor_empty">No movable HUD is on screen. Turn on FPS Counter, Keystrokes or Minimap in Options &gt; Mods, open a world, then come back.</string>
+    <string name="rust_hud_editor_reset">Back to corners</string>
+    <string name="rust_hud_editor_done">Done</string>
+    <string name="rust_hud_fps">FPS Counter</string>
+    <string name="rust_hud_keystrokes">Keystrokes</string>
+    <string name="rust_hud_minimap">Minimap</string>
     <string name="rust_edition_touch_screen">Touch the screen directly (no mouse pointer)</string>
     <string name="rust_edition_folder_game">Game folder</string>
     <string name="rust_edition_folder_worlds">Worlds</string>

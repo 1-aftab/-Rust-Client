@@ -1,0 +1,12 @@
+diff --git a/crates/horizon-client-render/src/graphics_ui.rs b/crates/horizon-client-render/src/graphics_ui.rs
+index bfa4aba..f00bd2c 100644
+--- a/crates/horizon-client-render/src/graphics_ui.rs
++++ b/crates/horizon-client-render/src/graphics_ui.rs
+@@ -557,4 +557,6 @@ const UPLOAD_STEPS: [u32; 8] = [0, 256, 512, 1024, 2048, 4096, 8192, 16384];
+ /// up to the whole world.
+-const LOD_STEPS: [u32; 18] = [
++const LOD_STEPS: [u32; 19] = [
+     0,
++    // Rust Client: a shorter first step, for phones.
++    32,
+     64,

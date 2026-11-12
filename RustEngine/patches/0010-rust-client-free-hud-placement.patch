@@ -1,11 +1,11 @@
 diff --git a/crates/horizon-client/src/extras_hud.rs b/crates/horizon-client/src/extras_hud.rs
-index cc26e15..75d3c74 100644
+index cc26e15..a252a9c 100644
 --- a/crates/horizon-client/src/extras_hud.rs
 +++ b/crates/horizon-client/src/extras_hud.rs
 @@ -29,2 +29,10 @@ impl Corners {
      /// above) what the corner already holds.
 +    /// Rust Client: what each corner holds, to give back with `set_used` when a box that
-+    /// took its place there was moved away (`place_free`).
++    /// took its place there was moved away (`FreeHud`).
 +    pub fn used(&self) -> [f32; 4] {
 +        self.used
 +    }
@@ -13,23 +13,147 @@ index cc26e15..75d3c74 100644
 +        self.used = used;
 +    }
      pub fn place(&mut self, corner: Corner, w: f32, h: f32) -> (f32, f32) {
-@@ -47,2 +55,35 @@ impl Corners {
+@@ -47,2 +55,175 @@ impl Corners {
  
 +thread_local! {
 +    /// Rust Client: where the minimap's mod wants it instead of its corner, as fractions of
 +    /// the way across and down the screen (None: its corner).
 +    pub static MINIMAP_AT: std::cell::Cell<Option<(f32, f32)>> = const { std::cell::Cell::new(None) };
++    /// Rust Client: where the minimap was last drawn (`drawn_box`), for its mod to note.
++    pub static MINIMAP_BOX: std::cell::Cell<Option<[f32; 4]>> = const { std::cell::Cell::new(None) };
 +}
 +
-+/// Rust Client: moves what `batch` got since `start` (a mod's box, drawn in its corner) so
-+/// that it lies `across` and `down` of the way over the screen (0 to 1, the box kept whole
-+/// on screen): a HUD box placed freely, whatever drew it.
-+pub fn place_free(batch: &mut HudBatch, corners: &Corners, start: usize, across: f32, down: f32) {
-+    let Some(drawn) = batch.vertices.get(start..) else {
-+        return;
-+    };
-+    if drawn.is_empty() {
-+        return;
++/// Rust Client: where a HUD box is: in its corner, or `across` and `down` percent of the way
++/// over the screen (the box kept whole on screen).
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub struct Place {
++    pub free: bool,
++    pub across: f32,
++    pub down: f32,
++}
++impl Place {
++    /// As kept in a mod's setting `rc_place`: "1 37.5 20" (free, across, down).
++    fn parse(text: &str) -> Option<Self> {
++        let mut words = text.split_whitespace();
++        let free = words.next()? == "1";
++        let mut percent = || {
++            let v = words.next()?.parse::<f32>().ok()?;
++            v.is_finite().then(|| v.clamp(0.0, 100.0))
++        };
++        let across = percent()?;
++        let down = percent()?;
++        Some(Self { free, across, down })
++    }
++    fn stored(&self) -> String {
++        format!("{} {:.2} {:.2}", u8::from(self.free), self.across, self.down)
++    }
++    /// The three buttons a mod's settings page shows for it.
++    pub fn labels(&self) -> [String; 3] {
++        [
++            format!("Position: {}", if self.free { "Free" } else { "Corner" }),
++            format!("Across: {:.0}%", self.across),
++            format!("Down: {:.0}%", self.down),
++        ]
++    }
++    /// Button `i` of the three: free or not, then 5% further across or down (round to 0).
++    pub fn click(self, i: usize) -> Self {
++        let step = |v: f32| if v >= 99.5 { 0.0 } else { ((v / 5.0).floor() * 5.0 + 5.0).min(100.0) };
++        match i {
++            0 => Self { free: !self.free, ..self },
++            1 => Self { across: step(self.across), ..self },
++            2 => Self { down: step(self.down), ..self },
++            _ => self,
++        }
++    }
++}
++
++/// Rust Client: a mod's HUD box the player places freely. The place is the mod's setting
++/// `rc_place`, which the launcher's "Move HUD" screen writes while the box is dragged, so it
++/// is read again every few frames; where the box was drawn is told back in `rc_box`
++/// ("x y w h" as fractions of the screen), which that screen shows its handles by.
++pub struct FreeHud {
++    start: (f32, f32),
++    place: std::cell::Cell<Option<Place>>,
++    age: std::cell::Cell<u32>,
++    told: std::cell::Cell<[f32; 4]>,
++    told_age: std::cell::Cell<u32>,
++}
++impl FreeHud {
++    /// `across`, `down`: where the box goes when it is first set free.
++    pub const fn new(across: f32, down: f32) -> Self {
++        Self {
++            start: (across, down),
++            place: std::cell::Cell::new(None),
++            age: std::cell::Cell::new(0),
++            told: std::cell::Cell::new([-1.0; 4]),
++            told_age: std::cell::Cell::new(0),
++        }
++    }
++    pub fn place(&self, get: impl Fn(&str) -> Option<String>) -> Place {
++        let age = self.age.get();
++        self.age.set(age.wrapping_add(1));
++        if let Some(place) = self.place.get()
++            && age % 6 != 0
++        {
++            return place;
++        }
++        let place = get("rc_place")
++            .and_then(|text| Place::parse(&text))
++            .or(self.place.get())
++            .unwrap_or(Place {
++                free: false,
++                across: self.start.0,
++                down: self.start.1,
++            });
++        self.place.set(Some(place));
++        place
++    }
++    pub fn set(&self, place: Place, set: impl Fn(&str, &str)) {
++        self.place.set(Some(place));
++        set("rc_place", &place.stored());
++    }
++    /// Tells where the box was drawn, when that changed (looked at twice a second or so).
++    pub fn tell(&self, drawn: [f32; 4], set: impl Fn(&str, &str)) {
++        let age = self.told_age.get();
++        self.told_age.set(age.wrapping_add(1));
++        if age % 30 != 0 {
++            return;
++        }
++        let told = self.told.get();
++        if (0..4).any(|i| (told[i] - drawn[i]).abs() > 0.002) {
++            self.told.set(drawn);
++            set(
++                "rc_box",
++                &format!("{:.4} {:.4} {:.4} {:.4}", drawn[0], drawn[1], drawn[2], drawn[3]),
++            );
++        }
++    }
++    /// What `batch` got since `start` is the box, drawn in its corner: moved to its place when
++    /// it is free, and told (`tell`).
++    pub fn settle(
++        &self,
++        batch: &mut HudBatch,
++        corners: &Corners,
++        start: usize,
++        get: impl Fn(&str) -> Option<String>,
++        set: impl Fn(&str, &str),
++    ) {
++        let place = self.place(get);
++        if place.free {
++            place_free(batch, corners, start, place.across / 100.0, place.down / 100.0);
++        }
++        if let Some(drawn) = drawn_box(batch, corners, start) {
++            self.tell(drawn, set);
++        }
++    }
++}
++
++/// Rust Client: the box around what `batch` got since `start`: x, y, width and height as
++/// fractions of the screen.
++pub fn drawn_box(batch: &HudBatch, corners: &Corners, start: usize) -> Option<[f32; 4]> {
++    let drawn = batch.vertices.get(start..)?;
++    if drawn.is_empty() || corners.width <= 0.0 || corners.height <= 0.0 {
++        return None;
 +    }
 +    let (mut x0, mut y0) = (f32::INFINITY, f32::INFINITY);
 +    let (mut x1, mut y1) = (f32::NEG_INFINITY, f32::NEG_INFINITY);
@@ -39,9 +163,25 @@ index cc26e15..75d3c74 100644
 +        x1 = x1.max(v.pos[0]);
 +        y1 = y1.max(v.pos[1]);
 +    }
-+    let x = (corners.width - (x1 - x0)).max(0.0) * across.clamp(0.0, 1.0);
-+    let y = (corners.height - (y1 - y0)).max(0.0) * down.clamp(0.0, 1.0);
-+    let (dx, dy) = ((x - x0).round(), (y - y0).round());
++    Some([
++        x0 / corners.width,
++        y0 / corners.height,
++        (x1 - x0) / corners.width,
++        (y1 - y0) / corners.height,
++    ])
++}
++
++/// Rust Client: moves what `batch` got since `start` (a mod's box, drawn in its corner) so
++/// that it lies `across` and `down` of the way over the screen (0 to 1, the box kept whole
++/// on screen): a HUD box placed freely, whatever drew it.
++pub fn place_free(batch: &mut HudBatch, corners: &Corners, start: usize, across: f32, down: f32) {
++    let Some([x0, y0, w, h]) = drawn_box(batch, corners, start) else {
++        return;
++    };
++    let x = (1.0 - w).max(0.0) * across.clamp(0.0, 1.0);
++    let y = (1.0 - h).max(0.0) * down.clamp(0.0, 1.0);
++    let dx = ((x - x0) * corners.width).round();
++    let dy = ((y - y0) * corners.height).round();
 +    for v in &mut batch.vertices[start..] {
 +        v.pos[0] += dx;
 +        v.pos[1] += dy;
@@ -50,10 +190,10 @@ index cc26e15..75d3c74 100644
 +
  /// How the minimap shows: its corner and side in GUI pixels, its image (an
 diff --git a/crates/horizon-client/src/game/extras.rs b/crates/horizon-client/src/game/extras.rs
-index 259b1d1..8ae239f 100644
+index 259b1d1..ce792c7 100644
 --- a/crates/horizon-client/src/game/extras.rs
 +++ b/crates/horizon-client/src/game/extras.rs
-@@ -259,3 +259,9 @@ impl Game<'_> {
+@@ -259,3 +259,10 @@ impl Game<'_> {
              };
 +            // Rust Client: the minimap placed freely (its mod's settings), its corner given back.
 +            let (start, held) = (batch.vertices.len(), corners.used());
@@ -62,4 +202,5 @@ index 259b1d1..8ae239f 100644
 +                extras_hud::place_free(batch, &corners, start, across, down);
 +                corners.set_used(held);
 +            }
++            extras_hud::MINIMAP_BOX.with(|b| b.set(extras_hud::drawn_box(batch, &corners, start)));
          }

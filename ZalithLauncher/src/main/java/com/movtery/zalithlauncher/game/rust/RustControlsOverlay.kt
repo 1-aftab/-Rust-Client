@@ -234,6 +234,9 @@ private fun Overlay(
     }
 
     var menu by remember { mutableStateOf(MenuState.NONE) }
+    // "Move HUD": the built-in mods' HUD boxes dragged over the running game
+    var hudEditor by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     DisposableEffect(adapter) {
         adapter.onSwitchMenu = { menu = menu.next() }
         onDispose { adapter.onSwitchMenu = null }
@@ -379,6 +382,10 @@ private fun Overlay(
             },
             onEditLayout = { current?.file?.let(onEditLayout) },
             onKeyboard = { adapter.keyboard() },
+            onMoveHud = {
+                adapter.releaseAll()
+                hudEditor = true
+            },
             onQuit = onQuit
         )
 
@@ -397,6 +404,13 @@ private fun Overlay(
             alpha = AllSettings.menuBallOpacity.state / 100f,
             onClick = { menu = menu.next() }
         )
+
+        if (hudEditor) {
+            RustHudEditor(
+                gameFolder = remember(context) { RustEdition.gameFolder(context) },
+                onDone = { hudEditor = false }
+            )
+        }
     }
 }
 
@@ -445,6 +459,7 @@ private fun GameMenu(
     onLayout: (LayoutEntry) -> Unit,
     onEditLayout: () -> Unit,
     onKeyboard: () -> Unit,
+    onMoveHud: () -> Unit,
     onQuit: () -> Unit
 ) {
     MenuSubscreen(
@@ -497,6 +512,16 @@ private fun GameMenu(
                     onClick = {
                         close()
                         onEditLayout()
+                    }
+                )
+            }
+            item {
+                MenuTextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = stringResource(R.string.rust_hud_editor_title),
+                    onClick = {
+                        close()
+                        onMoveHud()
                     }
                 )
             }

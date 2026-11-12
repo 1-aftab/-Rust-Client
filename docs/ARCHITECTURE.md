@@ -226,8 +226,8 @@ build, the engine was built with NDK 28).
 - ARM64 only, Vulkan 1.3 only, Minecraft 26.3 only.
 - No Java mods; Starling has its own mod formats.
 - The engine downloads Minecraft's assets from Mojang at first start and needs network for that.
-- CI builds the engine with upstream's `quick` profile (no LTO), which is slower at run time than
-  upstream's release builds.
+- CI builds the engine with upstream's `fast` profile, the one its releases use (the whole game
+  at opt-level 3). The build needs the swap the engine job adds.
 
 ## Look
 
@@ -262,10 +262,16 @@ native mods off (`SERVICE_SUPPORTED`, `NATIVE_MODS_BUILD`).
 - `RustEngine/tools/builtin-mods.txt` lists registry mods that are compiled into the engine of
   every APK (`build_engine.py` → `build_with_mods`, which runs upstream's `native_build.sh`).
   They are switched on and off in the game under Options > Mods.
-- Free placement of mod HUDs: `RustEngine/tools/mod_tweaks.py` edits the fetched sources of the
-  FPS Counter, Keystrokes and the Minimap (exact text replacements in pinned versions), adding
-  "Position: Corner/Free", "Across" and "Down" to each one's settings page. The box is drawn in
-  its corner and then moved by engine patch `0010` (`extras_hud::place_free`, `MINIMAP_AT`).
+- Free placement of mod HUDs: the FPS Counter, Keystrokes and the Minimap are dragged anywhere
+  with "Move HUD" in the Rust Edition's game menu (`game/rust/RustHudEditor.kt`), over the running
+  game. `RustEngine/tools/mod_tweaks.py` edits the fetched sources of these mods so that the box,
+  drawn in its corner, is then moved by engine patch `0010` (`extras_hud::FreeHud`, `MINIMAP_AT`).
+  Launcher and engine talk through two files in the mod's settings folder
+  (`horizon-mods/.horizon-mod-data/<mod>/`): the engine writes `rc_box` (where the box is drawn,
+  as fractions of the screen), the launcher writes `rc_place` ("1 across down" in percent), which
+  the engine reads again every few frames. The mods' settings pages also get the buttons
+  "Position: Corner/Free", "Across" and "Down".
+- LOD Distance has a 32 chunk step before 64 (engine patch `0011`).
   HUD+ has its own drag-and-drop editor; the other built-in mods draw no free-standing box.
 - About screen: the credits are folded under the entry "Open-source licences"
   (`AboutInfoScreen.kt`); they stay in the app because the licences require them.
