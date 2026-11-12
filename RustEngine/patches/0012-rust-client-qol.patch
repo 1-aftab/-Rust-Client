@@ -1,52 +1,72 @@
 diff --git a/crates/horizon-client-render/src/mesher.rs b/crates/horizon-client-render/src/mesher.rs
-index a5aff35..3d0a5cf 100644
+index a5aff35..15240fb 100644
 --- a/crates/horizon-client-render/src/mesher.rs
 +++ b/crates/horizon-client-render/src/mesher.rs
-@@ -501,2 +501,16 @@ enum Tint {
+@@ -501,2 +501,33 @@ enum Tint {
  }
-+/// Rust Client, X-Ray: while set, a section is meshed as if every block but ores, containers,
-+/// spawners and lava were air, at full light. The game sets it and meshes every section again.
-+pub static XRAY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-+/// Whether X-Ray still draws the block `name` (without its namespace).
-+fn xray_keeps(name: &str) -> bool {
-+    name.ends_with("_ore")
-+        || name.ends_with("chest")
-+        || name.ends_with("shulker_box")
-+        || name.ends_with("spawner")
-+        || matches!(
-+            name,
-+            "ancient_debris" | "barrel" | "lava" | "vault" | "end_portal_frame" | "budding_amethyst"
-+        )
++/// Rust Client, X-Ray: 0 when off; else bit 31, the block groups to draw a bit each (the
++/// client's `rc_qol::XRAY_GROUPS`) and bit 30 for all of it fully lit. A section is meshed as
++/// if every other block were air. The game sets it and meshes every section again.
++pub static XRAY: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
++/// The X-Ray group of the block `name` (without its namespace) as its bit, 0 for none.
++fn xray_group(name: &str) -> u32 {
++    let group = match name {
++        "nether_gold_ore" => 9,
++        "nether_quartz_ore" => 8,
++        "ancient_debris" => 10,
++        "barrel" => 12,
++        "lava" => 15,
++        "water" => 16,
++        "budding_amethyst" | "amethyst_cluster" => 17,
++        "end_portal_frame" | "end_portal" | "nether_portal" => 18,
++        "vault" | "trial_spawner" => 14,
++        _ if name.ends_with("coal_ore") => 0,
++        _ if name.ends_with("iron_ore") => 1,
++        _ if name.ends_with("copper_ore") => 2,
++        _ if name.ends_with("gold_ore") => 3,
++        _ if name.ends_with("redstone_ore") => 4,
++        _ if name.ends_with("lapis_ore") => 5,
++        _ if name.ends_with("diamond_ore") => 6,
++        _ if name.ends_with("emerald_ore") => 7,
++        _ if name.ends_with("chest") => 11,
++        _ if name.ends_with("shulker_box") => 13,
++        _ if name.ends_with("spawner") => 14,
++        _ => return 0,
++    };
++    1 << group
 +}
  /// Per-state data the mesher needs on every block, flattened for speed.
-@@ -568,2 +582,4 @@ pub struct MeshTables {
+@@ -568,2 +599,4 @@ pub struct MeshTables {
      full_faces: Vec<u8>,
-+    /// By state, whether X-Ray still draws it.
-+    xray_keep: Vec<bool>,
++    /// By state, its X-Ray group's bit (`xray_group`).
++    xray_groups: Vec<u32>,
      pub visibility: FaceVisibility,
-@@ -616,3 +632,7 @@ impl MeshTables {
+@@ -616,3 +649,7 @@ impl MeshTables {
          let mut info = Vec::with_capacity(facts.states.len());
-+        let mut xray_keep = Vec::with_capacity(facts.states.len());
++        let mut xray_groups = Vec::with_capacity(facts.states.len());
          for (id, s) in facts.states.iter().enumerate() {
-+            xray_keep.push(xray_keeps(
++            xray_groups.push(xray_group(
 +                s.name.strip_prefix("minecraft:").unwrap_or(&s.name),
 +            ));
              let state = assets
-@@ -742,2 +762,3 @@ impl MeshTables {
+@@ -742,2 +779,3 @@ impl MeshTables {
              info,
-+            xray_keep,
++            xray_groups,
              visibility,
-@@ -1399,2 +1420,12 @@ impl Mesher<'_> {
+@@ -1399,2 +1437,15 @@ impl Mesher<'_> {
          scratch.padded.fill(region, sy, own);
-+        if XRAY.load(std::sync::atomic::Ordering::Relaxed) {
-+            // Rust Client, X-Ray: what isn't kept is air, and all of it is fully lit.
-+            let keep = &self.tables.xray_keep;
++        let xray = XRAY.load(std::sync::atomic::Ordering::Relaxed);
++        if xray != 0 {
++            // Rust Client, X-Ray: what isn't chosen is air.
++            let groups = &self.tables.xray_groups;
 +            for block in &mut scratch.padded.blocks {
-+                if !keep.get(*block as usize).copied().unwrap_or(false) {
++                if (groups.get(*block as usize).copied().unwrap_or(0) & xray) == 0 {
 +                    *block = 0;
 +                }
 +            }
-+            scratch.padded.light.fill(0xFF);
++            if (xray & (1 << 30)) != 0 {
++                scratch.padded.light.fill(0xFF);
++            }
 +        }
          let pad = &scratch.padded;
 diff --git a/crates/horizon-client/src/client_lib.rs b/crates/horizon-client/src/client_lib.rs
@@ -57,6 +77,15 @@ index a9b81a8..974e8e3 100644
  pub mod extras_hud;
 +pub mod rc_qol;
  pub mod falling_block;
+diff --git a/crates/horizon-client/src/first_person.rs b/crates/horizon-client/src/first_person.rs
+index 078dd52..320b5a4 100644
+--- a/crates/horizon-client/src/first_person.rs
++++ b/crates/horizon-client/src/first_person.rs
+@@ -923,2 +923,4 @@ impl Clicks {
+     ) {
++        // Rust Client, QOL: Trigger Bot's click.
++        let attack_clicks = attack_clicks + crate::rc_qol::take_attack_clicks();
+         if self.right_click_delay > 0 {
 diff --git a/crates/horizon-client/src/game.rs b/crates/horizon-client/src/game.rs
 index 08a44af..0f49e13 100644
 --- a/crates/horizon-client/src/game.rs
@@ -67,29 +96,110 @@ index 08a44af..0f49e13 100644
  mod ram_limit;
 diff --git a/crates/horizon-client/src/game/rc_qol.rs b/crates/horizon-client/src/game/rc_qol.rs
 new file mode 100644
-index 0000000..95ca74f
+index 0000000..e6fb959
 --- /dev/null
 +++ b/crates/horizon-client/src/game/rc_qol.rs
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,98 @@
 +//! Rust Client: the quality-of-life switches at work in the game (`horizon_client::rc_qol`
 +//! has the switches themselves). Sprint is with the keys in `game/remote.rs`; X-Ray is in
-+//! the section mesher, and here every section is meshed again when it is switched.
-+use super::Game;
++//! the section mesher, and here every section is meshed again when it changes; Trigger Bot
++//! is here.
++use super::{Game, Screen};
 +use horizon_client::{mesher, rc_qol};
++use std::cell::Cell;
 +use std::sync::atomic::Ordering;
++
++thread_local! {
++    /// Ticks the crosshair has been on a target, and the ticks it has to be this time.
++    static ON_TARGET: Cell<(u32, u32)> = const { Cell::new((0, 0)) };
++    static RANDOM: Cell<u32> = const { Cell::new(0x2545_F491) };
++}
++
++/// A number below `n` (xorshift; nothing depends on its quality).
++fn random_below(n: u32) -> u32 {
++    RANDOM.with(|r| {
++        let mut x = r.get();
++        x ^= x << 13;
++        x ^= x >> 17;
++        x ^= x << 5;
++        r.set(x);
++        x % n.max(1)
++    })
++}
 +
 +impl Game<'_> {
 +    /// Once a client tick.
 +    pub(super) fn rc_qol_tick(&mut self) {
 +        rc_qol::refresh();
-+        let xray = rc_qol::get().xray;
-+        if mesher::XRAY.swap(xray, Ordering::Relaxed) != xray {
++        let q = rc_qol::get();
++        let mask = q.xray_mask();
++        if mesher::XRAY.swap(mask, Ordering::Relaxed) != mask {
 +            self.all_sections_changed();
 +        }
++        if q.trigger {
++            self.rc_trigger(q);
++        }
++    }
++
++    /// Trigger Bot: with the crosshair on a mob of a chosen kind for the delay, one attack
++    /// click, made by the hands as the player's own.
++    fn rc_trigger(&mut self, q: rc_qol::Qol) {
++        let wait = |ticks: (u32, u32)| ON_TARGET.with(|w| w.set(ticks));
++        if self.screen != Screen::Playing {
++            return wait((0, 0));
++        }
++        let own = self.rc_own_id();
++        let target = self.mob_hit().is_some_and(|(i, distance)| {
++            let m = &self.mobs[i];
++            let chosen = if m.kind.id == "minecraft:player" {
++                q.trigger_players
++            } else if m.hostile() {
++                q.trigger_monsters
++            } else {
++                q.trigger_animals
++            };
++            chosen && m.alive() && Some(m.id as i32) != own && self.before_block(distance)
++        });
++        if !target {
++            return wait((0, 0));
++        }
++        if q.trigger_weapon_only {
++            let item = self.held().map_or(String::new(), |s| format!("{}", s.item));
++            let item = item.strip_prefix("minecraft:").unwrap_or(&item);
++            let weapon = item.ends_with("_sword")
++                || item.ends_with("_axe")
++                || item.ends_with("_spear")
++                || matches!(item, "trident" | "mace");
++            if !weapon {
++                return wait((0, 0));
++            }
++        }
++        let (mut waited, mut needed) = ON_TARGET.with(Cell::get);
++        if waited == 0 {
++            needed = q.trigger_delay + random_below(q.trigger_random + 1);
++        }
++        waited += 1;
++        wait((waited, needed));
++        if waited <= needed {
++            return;
++        }
++        if q.trigger_cooldown && !self.rc_attack_ready() {
++            return;
++        }
++        if q.trigger_falling
++            && !self
++                .player
++                .as_ref()
++                .is_some_and(|p| !p.ground.on_ground && p.velocity.y < 0.0)
++        {
++            return;
++        }
++        rc_qol::click_attack();
++        wait((0, 0));
 +    }
 +}
 diff --git a/crates/horizon-client/src/game/remote.rs b/crates/horizon-client/src/game/remote.rs
-index 9376754..5670a11 100644
+index 9376754..6861883 100644
 --- a/crates/horizon-client/src/game/remote.rs
 +++ b/crates/horizon-client/src/game/remote.rs
 @@ -6311,2 +6311,4 @@ impl Game<'_> {
@@ -107,12 +217,26 @@ index 9376754..5670a11 100644
 +            keys.sprint = true;
 +        }
          // A server's anticheat simulates Java's keys: eight directions at full speed. A stick's
+@@ -9455,2 +9464,13 @@ impl Game<'_> {
+ 
++    /// Rust Client, QOL: whether the attack has charged (the cooldown is over).
++    pub(super) fn rc_attack_ready(&mut self) -> bool {
++        let speed = self
++            .own_attribute("minecraft:attack_speed")
++            .unwrap_or_else(|| self.main_hand_attack_speed());
++        self.hand_strength.scale(0.5, speed) >= 0.95
++    }
++    /// Rust Client, QOL: this client's own entity on the server.
++    pub(super) fn rc_own_id(&self) -> Option<i32> {
++        self.remote.as_ref().map(|r| r.entity_id)
++    }
+     /// An attribute's value on this client's player, if its map has the attribute.
 diff --git a/crates/horizon-client/src/rc_qol.rs b/crates/horizon-client/src/rc_qol.rs
 new file mode 100644
-index 0000000..bf331b1
+index 0000000..033f219
 --- /dev/null
 +++ b/crates/horizon-client/src/rc_qol.rs
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,163 @@
 +//! Rust Client: the quality-of-life switches. The launcher's "QOL" page writes them to
 +//! `rust-client-qol.txt` in the game folder (`key=value` lines); the game reads the file
 +//! again twice a second, so a switch acts at once. Everything is off without the file.
@@ -122,44 +246,126 @@ index 0000000..bf331b1
 +/// The file, in the game folder (the working directory).
 +pub const FILE: &str = "rust-client-qol.txt";
 +
++/// X-Ray's block groups: the file's key, the group's bit in the mesher's mask
++/// (`mesher::xray_group` gives a block's), and whether it shows unless the file says no.
++pub const XRAY_GROUPS: [(&str, u32, bool); 19] = [
++    ("xray_coal", 0, true),
++    ("xray_iron", 1, true),
++    ("xray_copper", 2, true),
++    ("xray_gold", 3, true),
++    ("xray_redstone", 4, true),
++    ("xray_lapis", 5, true),
++    ("xray_diamond", 6, true),
++    ("xray_emerald", 7, true),
++    ("xray_quartz", 8, true),
++    ("xray_nether_gold", 9, true),
++    ("xray_debris", 10, true),
++    ("xray_chests", 11, true),
++    ("xray_barrels", 12, true),
++    ("xray_shulkers", 13, true),
++    ("xray_spawners", 14, true),
++    ("xray_lava", 15, true),
++    ("xray_water", 16, false),
++    ("xray_amethyst", 17, false),
++    ("xray_portal", 18, true),
++];
++
 +#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 +pub struct Qol {
 +    /// Always sprint while moving forward.
 +    pub sprint: bool,
-+    /// Only ores, containers, spawners and lava are drawn, fully lit.
++    /// X-Ray: only the chosen block groups are drawn.
 +    pub xray: bool,
++    /// The groups chosen, a bit each (`XRAY_GROUPS`).
++    pub xray_groups: u32,
++    /// What X-Ray shows is fully lit.
++    pub xray_bright: bool,
++    /// Trigger Bot: attack what the crosshair is on.
++    pub trigger: bool,
++    pub trigger_players: bool,
++    pub trigger_monsters: bool,
++    pub trigger_animals: bool,
++    /// Only with a sword, an axe, a trident or a mace in the hand.
++    pub trigger_weapon_only: bool,
++    /// Only once the attack has charged again.
++    pub trigger_cooldown: bool,
++    /// Only while falling (critical hits).
++    pub trigger_falling: bool,
++    /// Ticks the crosshair stays on the target first, and up to this many more at random.
++    pub trigger_delay: u32,
++    pub trigger_random: u32,
 +}
 +
-+pub const OFF: Qol = Qol {
-+    sprint: false,
-+    xray: false,
-+};
-+
 +impl Qol {
++    /// What the mesher is told: 0 with X-Ray off, else bit 31, bit 30 for full light and the
++    /// groups.
++    pub fn xray_mask(&self) -> u32 {
++        if !self.xray {
++            return 0;
++        }
++        (1u32 << 31) | (u32::from(self.xray_bright) << 30) | self.xray_groups
++    }
++    pub fn off() -> Self {
++        let mut groups = 0;
++        for (_, bit, on) in XRAY_GROUPS {
++            groups |= u32::from(on) << bit;
++        }
++        Self {
++            sprint: false,
++            xray: false,
++            xray_groups: groups,
++            xray_bright: true,
++            trigger: false,
++            trigger_players: true,
++            trigger_monsters: true,
++            trigger_animals: false,
++            trigger_weapon_only: false,
++            trigger_cooldown: true,
++            trigger_falling: false,
++            trigger_delay: 1,
++            trigger_random: 0,
++        }
++    }
 +    pub fn parse(text: &str) -> Self {
-+        let mut q = OFF;
++        let mut q = Self::off();
 +        for line in text.lines() {
 +            let Some((key, value)) = line.split_once('=') else {
 +                continue;
 +            };
-+            let value = value.trim();
++            let (key, value) = (key.trim(), value.trim());
 +            let on = value == "true" || value == "1";
-+            match key.trim() {
++            let ticks = |max: u32| value.parse::<u32>().map_or(0, |v| v.min(max));
++            match key {
 +                "sprint" => q.sprint = on,
 +                "xray" => q.xray = on,
-+                _ => {}
++                "xray_bright" => q.xray_bright = on,
++                "trigger" => q.trigger = on,
++                "trigger_players" => q.trigger_players = on,
++                "trigger_monsters" => q.trigger_monsters = on,
++                "trigger_animals" => q.trigger_animals = on,
++                "trigger_weapon_only" => q.trigger_weapon_only = on,
++                "trigger_cooldown" => q.trigger_cooldown = on,
++                "trigger_falling" => q.trigger_falling = on,
++                "trigger_delay" => q.trigger_delay = ticks(40),
++                "trigger_random" => q.trigger_random = ticks(40),
++                _ => {
++                    if let Some(&(_, bit, _)) = XRAY_GROUPS.iter().find(|g| g.0 == key) {
++                        q.xray_groups = (q.xray_groups & !(1u32 << bit)) | (u32::from(on) << bit);
++                    }
++                }
 +            }
 +        }
 +        q
 +    }
 +}
 +
-+static NOW: RwLock<Qol> = RwLock::new(OFF);
++static NOW: RwLock<Option<Qol>> = RwLock::new(None);
 +static CALLS: AtomicU32 = AtomicU32::new(0);
++static ATTACK_CLICKS: AtomicU32 = AtomicU32::new(0);
 +
 +/// The switches as they are now.
 +pub fn get() -> Qol {
-+    *NOW.read().unwrap_or_else(|e| e.into_inner())
++    (*NOW.read().unwrap_or_else(|e| e.into_inner())).unwrap_or_else(Qol::off)
 +}
 +
 +/// Once a client tick: reads the file again every tenth call.
@@ -167,8 +373,16 @@ index 0000000..bf331b1
 +    if CALLS.fetch_add(1, Ordering::Relaxed) % 10 != 0 {
 +        return;
 +    }
-+    let found = std::fs::read_to_string(FILE).map_or(OFF, |text| Qol::parse(&text));
-+    *NOW.write().unwrap_or_else(|e| e.into_inner()) = found;
++    let found = std::fs::read_to_string(FILE).map_or_else(|_| Qol::off(), |text| Qol::parse(&text));
++    *NOW.write().unwrap_or_else(|e| e.into_inner()) = Some(found);
++}
++
++/// Trigger Bot's click: one attack click more for the hands' next tick.
++pub fn click_attack() {
++    ATTACK_CLICKS.store(1, Ordering::Relaxed);
++}
++pub fn take_attack_clicks() -> u32 {
++    ATTACK_CLICKS.swap(0, Ordering::Relaxed)
 +}
 +
 +#[cfg(test)]
@@ -177,8 +391,12 @@ index 0000000..bf331b1
 +
 +    #[test]
 +    fn reads_the_switches_and_skips_the_rest() {
-+        let q = Qol::parse("sprint=true\nxray = 1\nfly=true\nnonsense\n");
-+        assert_eq!(q, Qol { sprint: true, xray: true });
-+        assert_eq!(Qol::parse("sprint=false\n"), OFF);
++        let q = Qol::parse("sprint=true\nxray = 1\nxray_coal=false\nxray_water=true\nfly=true\n");
++        assert!(q.sprint && q.xray && !q.trigger);
++        assert_eq!(q.xray_groups & 1, 0);
++        assert_ne!(q.xray_groups & (1 << 16), 0);
++        assert_ne!(q.xray_mask() & (1 << 31), 0);
++        assert_eq!(Qol::parse("sprint=false\n"), Qol::off());
++        assert_eq!(Qol::off().xray_mask(), 0);
 +    }
 +}

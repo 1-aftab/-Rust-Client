@@ -27,6 +27,7 @@ import android.os.Bundle
 import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.ComponentDialog
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -654,12 +655,17 @@ private fun GameMenu(
     }
 }
 
-/** The game menu's "QOL" page: a switch for each feature */
+/**
+ * The game menu's "QOL" page: the features, each with its switch, and behind "Options" a
+ * feature's own page with its choices in sections.
+ */
 @Composable
 private fun QolPage(qol: RustQol, onBack: () -> Unit) {
+    var open by remember { mutableStateOf<RustQol.Feature?>(null) }
+    val feature = open
     Text(
         modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
-        text = "QOL",
+        text = if (feature == null) "QOL" else "QOL  >  ${feature.title}",
         style = MaterialTheme.typography.titleMedium
     )
     LazyColumn(
@@ -671,41 +677,97 @@ private fun QolPage(qol: RustQol, onBack: () -> Unit) {
             MenuTextButton(
                 modifier = Modifier.fillMaxWidth(),
                 text = "< Back",
-                onClick = onBack
+                onClick = { if (feature == null) onBack() else open = null }
             )
         }
-        item {
-            MenuTextButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = "Turn everything off",
-                onClick = { qol.allOff() }
-            )
-        }
-        val rows = RustQol.ROWS
-        items(rows.size) { index ->
-            when (val row = rows[index]) {
-                is RustQol.Header -> Text(
-                    modifier = Modifier.padding(start = 8.dp, top = 8.dp),
-                    text = row.label,
-                    style = MaterialTheme.typography.labelLarge
-                )
-                is RustQol.Switch -> MenuSwitchButton(
+        if (feature == null) {
+            RustQol.FEATURES.forEach { each ->
+                item { QolHeading(title = each.title, note = each.summary) }
+                item {
+                    MenuSwitchButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = "Enabled",
+                        switch = qol.isOn(each),
+                        onSwitch = { qol.setOn(each, it) }
+                    )
+                }
+                if (each.sections.isNotEmpty()) {
+                    item {
+                        MenuTextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            text = "${each.title} options  >",
+                            onClick = { open = each }
+                        )
+                    }
+                }
+            }
+        } else {
+            item {
+                MenuSwitchButton(
                     modifier = Modifier.fillMaxWidth(),
-                    text = row.label,
-                    switch = qol.isOn(row.key),
-                    onSwitch = { qol.setOn(row.key, it) }
-                )
-                is RustQol.Slider -> MenuSliderLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = row.label + if (row.scale == 10) " (tenths)" else "",
-                    value = qol.value(row),
-                    valueRange = row.min.toFloat()..row.max.toFloat(),
-                    enabled = qol.isOn(row.of),
-                    onValueChange = { qol.setValue(row, it, write = false) },
-                    onValueChangeFinished = { qol.setValue(row, it, write = true) },
-                    suffix = if (row.scale == 10) null else row.suffix
+                    text = "Enabled",
+                    switch = qol.isOn(feature),
+                    onSwitch = { qol.setOn(feature, it) }
                 )
             }
+            feature.sections.forEach { section ->
+                item { QolHeading(title = section.title, note = null) }
+                val switches = section.rows.count { it is RustQol.Switch }
+                if (switches > 2) {
+                    item {
+                        val all = section.rows.all { it !is RustQol.Switch || qol.isOn(it) }
+                        MenuTextButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            text = if (all) "Clear all" else "Select all",
+                            onClick = { qol.setAll(section, !all) }
+                        )
+                    }
+                }
+                section.rows.forEach { row ->
+                    item {
+                        when (row) {
+                            is RustQol.Switch -> MenuSwitchButton(
+                                modifier = Modifier.fillMaxWidth(),
+                                text = row.label,
+                                switch = qol.isOn(row),
+                                onSwitch = { qol.setOn(row, it) }
+                            )
+                            is RustQol.Slider -> MenuSliderLayout(
+                                modifier = Modifier.fillMaxWidth(),
+                                title = row.label,
+                                value = qol.value(row),
+                                valueRange = row.min.toFloat()..row.max.toFloat(),
+                                onValueChange = { qol.setValue(row, it, write = false) },
+                                onValueChangeFinished = { qol.setValue(row, it, write = true) },
+                                suffix = row.suffix
+                            )
+                        }
+                    }
+                }
+            }
+            item { QolHeading(title = "Reset", note = null) }
+            item {
+                MenuTextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = "Reset ${feature.title} options",
+                    onClick = { qol.reset(feature) }
+                )
+            }
+        }
+    }
+}
+
+/** A section's heading on the "QOL" page, with a line of explanation under a feature's */
+@Composable
+private fun QolHeading(title: String, note: String?) {
+    Column(modifier = Modifier.padding(start = 8.dp, top = 10.dp, end = 8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        if (note != null) {
+            Text(text = note, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
