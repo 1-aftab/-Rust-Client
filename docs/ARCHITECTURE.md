@@ -271,8 +271,8 @@ native mods off (`SERVICE_SUPPORTED`, `NATIVE_MODS_BUILD`).
   as fractions of the screen), the launcher writes `rc_place` ("1 across down" in percent), which
   the engine reads again every few frames. The mods' settings pages also get the buttons
   "Position: Corner/Free", "Across" and "Down".
-- LOD Distance has a 32 chunk step before 64 (engine patch `0011`).
   HUD+ has its own drag-and-drop editor; the other built-in mods draw no free-standing box.
+- LOD Distance has a 32 chunk step before 64 (engine patch `0011`).
 - About screen: the credits are folded under the entry "Open-source licences"
   (`AboutInfoScreen.kt`); they stay in the app because the licences require them.
 - Gyroscope aiming in the Rust Edition is the launcher's own (`GyroscopeReader`), fed to the
