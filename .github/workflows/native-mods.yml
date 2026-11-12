@@ -80,7 +80,7 @@ jobs:
           elif event == "workflow_dispatch":
               version, mods = os.environ["IN_VERSION"].strip(), os.environ["IN_MODS"]
           else:
-              version, mods = "0.8.0", "mousetricks hud_plus"
+              version, mods = "0.8.0", "coords_hud"
           if not re.fullmatch(r"[0-9]+(\.[0-9]+){1,3}", version):
               refuse("the request does not say the game's version.")
           wanted = {}
