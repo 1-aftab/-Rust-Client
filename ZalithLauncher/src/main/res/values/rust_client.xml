@@ -74,7 +74,7 @@
     <string name="rust_lite_customise_hud">Customise HUD</string>
     <string name="rust_lite_shader_packs">Download shader packs</string>
     <string name="rust_lite_resource_packs">Download resource packs</string>
-    <string name="rust_lite_downloads_note">Downloads start the game and open over it. Customise HUD shows the HUD where the game last drew it.</string>
+    <string name="rust_lite_downloads_note">Customise HUD shows the HUD where the game last drew it. Shader packs and resource packs are downloaded inside the game.</string>
     <string name="about_rust_lite_motto">One engine. Every frame.</string>
     <string name="about_rust_lite_story">Rust Client Lite is Rust Client with only the Rust Edition: Minecraft rebuilt from the ground up on Vulkan, with no Java runtime in the app at all. It carries the mods that help in survival, Auto Sprint, your control layouts, the gyroscope and the virtual mouse, and nothing that would cost frames.</string>
 </resources>

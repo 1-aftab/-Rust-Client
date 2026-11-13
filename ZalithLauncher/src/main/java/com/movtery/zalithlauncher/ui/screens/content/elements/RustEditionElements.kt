@@ -19,7 +19,6 @@
 
 package com.movtery.zalithlauncher.ui.screens.content.elements
 
-import io.github.juanluci.starling.EngineCatalog
 import com.movtery.zalithlauncher.game.rust.RustHudEditor
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Dialog
@@ -157,32 +156,14 @@ private fun EditionButton(
 /**
  * Home screen card of Rust Client Lite, where the edition selector is in Rust Client: there is
  * one edition, so the card holds what belongs to it. "Customise HUD" is the launcher's own
- * editor (the frames are where the game last drew its HUD); the pack downloads are the
- * launcher's screen over the engine's catalog, which needs the engine running, so they start
- * the game and open over it.
+ * editor (the frames are where the game last drew its HUD). Shader packs, resource packs
+ * and mods are downloaded in the game only (its own screens, or the menu ball).
  */
 @Composable
 fun RustLiteCard(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val problem = remember { runCatching { RustEdition.problem(context) }.getOrNull() }
     var hudEditor by remember { mutableStateOf(false) }
-    var shown by remember { mutableStateOf<RustEdition.Problem?>(null) }
-    shown?.let { current ->
-        RustEditionProblemDialog(problem = current, onDismiss = { shown = null })
-    }
-    val download: (Int) -> Unit = { shelf ->
-        if (problem != null) {
-            shown = problem
-        } else {
-            runCatching {
-                RustEdition.launch(
-                    context = context,
-                    account = AccountsManager.currentAccountFlow.value,
-                    catalog = shelf
-                )
-            }
-        }
-    }
 
     BackgroundCard(
         modifier = modifier.fillMaxWidth(),
@@ -220,12 +201,6 @@ fun RustLiteCard(modifier: Modifier = Modifier) {
             ) {
                 Button(onClick = { hudEditor = true }) {
                     Text(text = stringResource(R.string.rust_lite_customise_hud), maxLines = 1)
-                }
-                OutlinedButton(onClick = { download(EngineCatalog.SHELF_SHADER_PACKS) }) {
-                    Text(text = stringResource(R.string.rust_lite_shader_packs), maxLines = 1)
-                }
-                OutlinedButton(onClick = { download(EngineCatalog.SHELF_RESOURCE_PACKS) }) {
-                    Text(text = stringResource(R.string.rust_lite_resource_packs), maxLines = 1)
                 }
             }
             Text(
