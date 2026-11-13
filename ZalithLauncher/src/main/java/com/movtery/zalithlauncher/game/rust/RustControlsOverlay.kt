@@ -29,6 +29,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import androidx.activity.ComponentDialog
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -82,16 +83,10 @@ import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.setting.enums.MouseControlMode
 import com.movtery.zalithlauncher.setting.enums.isLauncherInDarkTheme
 import com.movtery.zalithlauncher.setting.unit.floatRange
-import com.movtery.zalithlauncher.ui.components.MenuListLayout
-import com.movtery.zalithlauncher.ui.components.MenuSliderLayout
 import com.movtery.zalithlauncher.ui.components.MenuState
-import com.movtery.zalithlauncher.ui.components.MenuSubscreen
-import com.movtery.zalithlauncher.ui.components.MenuSwitchButton
-import com.movtery.zalithlauncher.ui.components.MenuTextButton
 import com.movtery.zalithlauncher.ui.control.mouse.MousePointer
 import com.movtery.zalithlauncher.ui.control.mouse.getMouseFile
 import com.movtery.zalithlauncher.ui.control.mouse.mouseFixedPosition
-import com.movtery.zalithlauncher.ui.screens.game.elements.DraggableGameBall
 import com.movtery.zalithlauncher.ui.theme.ZalithLauncherTheme
 import com.movtery.zalithlauncher.utils.file.ifExists
 import kotlinx.coroutines.Dispatchers
@@ -376,51 +371,49 @@ private fun Overlay(
             )
         }
 
-        GameMenu(
-            state = menu,
-            close = { menu = MenuState.HIDE },
-            layouts = layouts,
-            current = current,
-            onLayout = { entry ->
-                AllSettings.controlLayout.save(entry.file.name)
-                chosen = entry.file.name
-            },
-            onEditLayout = { current?.file?.let(onEditLayout) },
-            onKeyboard = { adapter.keyboard() },
-            qol = remember(context) { RustQol(RustEdition.gameFolder(context)) },
-            mods = remember(context) { RustMods(RustEdition.gameFolder(context)) },
-            onMoveHud = {
-                adapter.releaseAll()
-                hudEditor = true
-            },
-            onCatalog = { shelf ->
-                adapter.releaseAll()
-                onCatalog(shelf)
-            },
-            onQuit = onQuit
-        )
+        ForgeTheme {
+            GameMenu(
+                state = menu,
+                close = { menu = MenuState.HIDE },
+                layouts = layouts,
+                current = current,
+                onLayout = { entry ->
+                    AllSettings.controlLayout.save(entry.file.name)
+                    chosen = entry.file.name
+                },
+                onEditLayout = { current?.file?.let(onEditLayout) },
+                onKeyboard = { adapter.keyboard() },
+                qol = remember(context) { RustQol(RustEdition.gameFolder(context)) },
+                mods = remember(context) { RustMods(RustEdition.gameFolder(context)) },
+                onMoveHud = {
+                    adapter.releaseAll()
+                    hudEditor = true
+                },
+                onCatalog = { shelf ->
+                    adapter.releaseAll()
+                    onCatalog(shelf)
+                },
+                onQuit = onQuit
+            )
+        }
 
         // the floating menu button; always there, so the menu can be reached with any layout
-        DraggableGameBall(
+        ForgeBall(
             position = AllSettings.menuBallPos.state,
             onPositionChanged = { AllSettings.menuBallPos.updateState(it) },
             onSavePos = { AllSettings.menuBallPos.save() },
-            gameFps = { null },
-            fpsDisplayMode = AllSettings.fpsDisplayMode.state,
-            fpsHistory = { emptyList() },
-            fpsMax = { 0 },
-            fpsMin = { 0 },
-            showMemory = false,
             opened = menu == MenuState.SHOW,
             alpha = AllSettings.menuBallOpacity.state / 100f,
             onClick = { menu = menu.next() }
         )
 
         if (hudEditor) {
-            RustHudEditor(
-                gameFolder = remember(context) { RustEdition.gameFolder(context) },
-                onDone = { hudEditor = false }
-            )
+            ForgeTheme {
+                RustHudEditor(
+                    gameFolder = remember(context) { RustEdition.gameFolder(context) },
+                    onDone = { hudEditor = false }
+                )
+            }
         }
     }
 }
@@ -441,9 +434,11 @@ private fun TouchModeButton(
         modifier = modifier
             .size(40.dp)
             .alpha(alpha),
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        contentColor = MaterialTheme.colorScheme.onSurface,
+        // the same cut iron tag as the menu button
+        shape = Forge.ChipShape,
+        color = Forge.Iron.copy(alpha = 0.82f),
+        contentColor = Forge.Ember,
+        border = androidx.compose.foundation.BorderStroke(1.dp, Forge.Rust),
         onClick = onSwitch
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -459,7 +454,8 @@ private fun TouchModeButton(
 }
 
 /**
- * The game menu of the Rust Edition: what the Java Edition's has for the controls.
+ * The game menu of the Rust Edition, in its own look (RustForgeUi.kt): numbered sections for
+ * what the Java Edition's menu has for the controls, and the pages for QOL and the mods.
  */
 @Composable
 private fun GameMenu(
@@ -476,294 +472,317 @@ private fun GameMenu(
     onCatalog: (Int) -> Unit,
     onQuit: () -> Unit
 ) {
-    // the "QOL" page takes the menu's place while it is open
+    // the "QOL" and "Mods" pages take the menu's place while they are open
     var qolPage by remember { mutableStateOf(false) }
     var modsPage by remember { mutableStateOf(false) }
-    MenuSubscreen(
-        state = state,
-        closeScreen = close
-    ) {
+    ForgePanel(state = state, closeScreen = close) {
         if (modsPage) {
             ModsPage(mods = mods, onBack = { modsPage = false })
         } else if (qolPage) {
             QolPage(qol = qol, onBack = { qolPage = false })
         } else {
-        Text(
-            modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
-            text = stringResource(R.string.game_menu_title),
-            style = MaterialTheme.typography.titleMedium
-        )
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(all = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            item {
-                MenuTextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.game_menu_option_input_method),
-                    onClick = {
-                        onKeyboard()
-                        close()
-                    }
-                )
-            }
-            item {
-                if (current != null) {
-                    MenuListLayout(
+            ForgeHeader(title = stringResource(R.string.game_menu_title))
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 14.dp, top = 4.dp, end = 12.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                item { ForgeSection(index = 1, title = "Game") }
+                item {
+                    ForgeButton(
                         modifier = Modifier.fillMaxWidth(),
-                        title = stringResource(R.string.game_menu_option_replacement_control),
-                        items = layouts,
-                        currentItem = current,
-                        onItemChange = onLayout,
-                        getItemText = { it.name }
+                        text = "QOL",
+                        note = RustQol.FEATURES.joinToString(", ") { it.title },
+                        mark = ">",
+                        onClick = { qolPage = true }
                     )
-                } else {
-                    MenuTextButton(
+                }
+                item {
+                    ForgeButton(
                         modifier = Modifier.fillMaxWidth(),
-                        text = stringResource(R.string.control_manage_list_empty),
-                        enabled = false
+                        text = "Mods",
+                        note = "${RustMods.ALL.count { mods.isOn(it) }} of ${RustMods.ALL.size} on",
+                        mark = ">",
+                        onClick = { modsPage = true }
+                    )
+                }
+                item {
+                    ForgeButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.game_menu_option_input_method),
+                        onClick = {
+                            onKeyboard()
+                            close()
+                        }
+                    )
+                }
+
+                item { ForgeSection(index = 2, title = "Controls") }
+                item {
+                    if (current != null) {
+                        ForgeList(
+                            modifier = Modifier.fillMaxWidth(),
+                            title = stringResource(R.string.game_menu_option_replacement_control),
+                            items = layouts,
+                            currentItem = current,
+                            onItemChange = onLayout,
+                            getItemText = { it.name }
+                        )
+                    } else {
+                        ForgeButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            text = stringResource(R.string.control_manage_list_empty),
+                            enabled = false
+                        )
+                    }
+                }
+                item {
+                    ForgeButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.control_manage_info_edit),
+                        mark = ">",
+                        enabled = current != null,
+                        onClick = {
+                            close()
+                            onEditLayout()
+                        }
+                    )
+                }
+                item {
+                    ForgeSlider(
+                        modifier = Modifier.fillMaxWidth(),
+                        title = stringResource(R.string.game_menu_option_controls_opacity),
+                        value = AllSettings.controlsOpacity.state,
+                        valueRange = AllSettings.controlsOpacity.floatRange,
+                        onValueChange = { AllSettings.controlsOpacity.updateState(it) },
+                        onValueChangeFinished = { AllSettings.controlsOpacity.save(it) },
+                        suffix = "%"
+                    )
+                }
+                item {
+                    ForgeSlider(
+                        modifier = Modifier.fillMaxWidth(),
+                        title = stringResource(R.string.game_menu_option_menu_ball_opacity),
+                        value = AllSettings.menuBallOpacity.state,
+                        valueRange = AllSettings.menuBallOpacity.floatRange,
+                        onValueChange = { AllSettings.menuBallOpacity.updateState(it) },
+                        onValueChangeFinished = { AllSettings.menuBallOpacity.save(it) },
+                        suffix = "%"
+                    )
+                }
+
+                item { ForgeSection(index = 3, title = "Gyroscope") }
+                item {
+                    ForgeSwitch(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.settings_control_gyroscope_title),
+                        switch = AllSettings.gyroscopeControl.state,
+                        onSwitch = { AllSettings.gyroscopeControl.save(it) }
+                    )
+                }
+                item {
+                    ForgeSlider(
+                        modifier = Modifier.fillMaxWidth(),
+                        title = stringResource(R.string.settings_control_gyroscope_sensitivity_title),
+                        value = AllSettings.gyroscopeSensitivity.state,
+                        valueRange = AllSettings.gyroscopeSensitivity.floatRange,
+                        enabled = AllSettings.gyroscopeControl.state,
+                        onValueChange = { AllSettings.gyroscopeSensitivity.updateState(it) },
+                        onValueChangeFinished = { AllSettings.gyroscopeSensitivity.save(it) },
+                        suffix = "%"
+                    )
+                }
+                item {
+                    ForgeSwitch(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.settings_control_gyroscope_invert_x_title),
+                        switch = AllSettings.gyroscopeInvertX.state,
+                        onSwitch = { AllSettings.gyroscopeInvertX.save(it) },
+                        enabled = AllSettings.gyroscopeControl.state
+                    )
+                }
+                item {
+                    ForgeSwitch(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.settings_control_gyroscope_invert_y_title),
+                        switch = AllSettings.gyroscopeInvertY.state,
+                        onSwitch = { AllSettings.gyroscopeInvertY.save(it) },
+                        enabled = AllSettings.gyroscopeControl.state
+                    )
+                }
+
+                item { ForgeSection(index = 4, title = "Pointer") }
+                item {
+                    ForgeSwitch(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.rust_edition_touch_screen),
+                        switch = AllSettings.rustTouchScreen.state,
+                        onSwitch = { AllSettings.rustTouchScreen.save(it) }
+                    )
+                }
+                item {
+                    ForgeSwitch(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.settings_control_mouse_enable_click_title),
+                        switch = AllSettings.enableMouseClick.state,
+                        onSwitch = { AllSettings.enableMouseClick.save(it) },
+                        enabled = !AllSettings.rustTouchScreen.state
+                    )
+                }
+                item {
+                    ForgeSlider(
+                        modifier = Modifier.fillMaxWidth(),
+                        title = stringResource(R.string.settings_control_mouse_size_title),
+                        value = AllSettings.mouseSize.state,
+                        valueRange = AllSettings.mouseSize.floatRange,
+                        onValueChange = { AllSettings.mouseSize.updateState(it) },
+                        onValueChangeFinished = { AllSettings.mouseSize.save(it) },
+                        suffix = "dp"
+                    )
+                }
+                item {
+                    ForgeSlider(
+                        modifier = Modifier.fillMaxWidth(),
+                        title = stringResource(R.string.settings_control_mouse_sensitivity_title),
+                        value = AllSettings.cursorSensitivity.state,
+                        valueRange = AllSettings.cursorSensitivity.floatRange,
+                        onValueChange = { AllSettings.cursorSensitivity.updateState(it) },
+                        onValueChangeFinished = { AllSettings.cursorSensitivity.save(it) },
+                        suffix = "%"
+                    )
+                }
+                item {
+                    ForgeSlider(
+                        modifier = Modifier.fillMaxWidth(),
+                        title = stringResource(R.string.settings_control_mouse_capture_sensitivity_title),
+                        value = AllSettings.mouseCaptureSensitivity.state,
+                        valueRange = AllSettings.mouseCaptureSensitivity.floatRange,
+                        onValueChange = { AllSettings.mouseCaptureSensitivity.updateState(it) },
+                        onValueChangeFinished = { AllSettings.mouseCaptureSensitivity.save(it) },
+                        suffix = "%"
+                    )
+                }
+                item {
+                    ForgeSlider(
+                        modifier = Modifier.fillMaxWidth(),
+                        title = stringResource(R.string.settings_control_mouse_long_press_delay_title),
+                        value = AllSettings.mouseLongPressDelay.state,
+                        valueRange = AllSettings.mouseLongPressDelay.floatRange,
+                        onValueChange = { AllSettings.mouseLongPressDelay.updateState(it) },
+                        onValueChangeFinished = { AllSettings.mouseLongPressDelay.save(it) },
+                        suffix = "ms"
+                    )
+                }
+
+                item { ForgeSection(index = 5, title = "HUD and packs") }
+                item {
+                    ForgeButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.rust_hud_editor_title),
+                        mark = ">",
+                        onClick = {
+                            close()
+                            onMoveHud()
+                        }
+                    )
+                }
+                item {
+                    ForgeButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.rust_lite_shader_packs),
+                        mark = ">",
+                        onClick = {
+                            close()
+                            onCatalog(EngineCatalog.SHELF_SHADER_PACKS)
+                        }
+                    )
+                }
+                item {
+                    ForgeButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.rust_lite_resource_packs),
+                        mark = ">",
+                        onClick = {
+                            close()
+                            onCatalog(EngineCatalog.SHELF_RESOURCE_PACKS)
+                        }
+                    )
+                }
+
+                item { ForgeSection(index = 6, title = "Session") }
+                item {
+                    ForgeButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = stringResource(R.string.game_button_force_close),
+                        danger = true,
+                        onClick = onQuit
                     )
                 }
             }
-            item {
-                MenuTextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.control_manage_info_edit),
-                    enabled = current != null,
-                    onClick = {
-                        close()
-                        onEditLayout()
-                    }
-                )
-            }
-            item {
-                MenuTextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = "QOL",
-                    onClick = { qolPage = true }
-                )
-            }
-            item {
-                MenuTextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = "Mods",
-                    onClick = { modsPage = true }
-                )
-            }
-            item {
-                MenuTextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.rust_hud_editor_title),
-                    onClick = {
-                        close()
-                        onMoveHud()
-                    }
-                )
-            }
-            item {
-                MenuTextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.rust_lite_shader_packs),
-                    onClick = {
-                        close()
-                        onCatalog(EngineCatalog.SHELF_SHADER_PACKS)
-                    }
-                )
-            }
-            item {
-                MenuTextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.rust_lite_resource_packs),
-                    onClick = {
-                        close()
-                        onCatalog(EngineCatalog.SHELF_RESOURCE_PACKS)
-                    }
-                )
-            }
-            item {
-                MenuSliderLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = stringResource(R.string.game_menu_option_controls_opacity),
-                    value = AllSettings.controlsOpacity.state,
-                    valueRange = AllSettings.controlsOpacity.floatRange,
-                    onValueChange = { AllSettings.controlsOpacity.updateState(it) },
-                    onValueChangeFinished = { AllSettings.controlsOpacity.save(it) },
-                    suffix = "%"
-                )
-            }
-            item {
-                MenuSwitchButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.rust_edition_touch_screen),
-                    switch = AllSettings.rustTouchScreen.state,
-                    onSwitch = { AllSettings.rustTouchScreen.save(it) }
-                )
-            }
-            item {
-                MenuSwitchButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.settings_control_gyroscope_title),
-                    switch = AllSettings.gyroscopeControl.state,
-                    onSwitch = { AllSettings.gyroscopeControl.save(it) }
-                )
-            }
-            item {
-                MenuSliderLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = stringResource(R.string.settings_control_gyroscope_sensitivity_title),
-                    value = AllSettings.gyroscopeSensitivity.state,
-                    valueRange = AllSettings.gyroscopeSensitivity.floatRange,
-                    enabled = AllSettings.gyroscopeControl.state,
-                    onValueChange = { AllSettings.gyroscopeSensitivity.updateState(it) },
-                    onValueChangeFinished = { AllSettings.gyroscopeSensitivity.save(it) },
-                    suffix = "%"
-                )
-            }
-            item {
-                MenuSwitchButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.settings_control_mouse_enable_click_title),
-                    switch = AllSettings.enableMouseClick.state,
-                    onSwitch = { AllSettings.enableMouseClick.save(it) },
-                    enabled = !AllSettings.rustTouchScreen.state
-                )
-            }
-            item {
-                MenuSliderLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = stringResource(R.string.settings_control_mouse_size_title),
-                    value = AllSettings.mouseSize.state,
-                    valueRange = AllSettings.mouseSize.floatRange,
-                    onValueChange = { AllSettings.mouseSize.updateState(it) },
-                    onValueChangeFinished = { AllSettings.mouseSize.save(it) },
-                    suffix = "Dp"
-                )
-            }
-            item {
-                MenuSliderLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = stringResource(R.string.settings_control_mouse_sensitivity_title),
-                    value = AllSettings.cursorSensitivity.state,
-                    valueRange = AllSettings.cursorSensitivity.floatRange,
-                    onValueChange = { AllSettings.cursorSensitivity.updateState(it) },
-                    onValueChangeFinished = { AllSettings.cursorSensitivity.save(it) },
-                    suffix = "%"
-                )
-            }
-            item {
-                MenuSliderLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = stringResource(R.string.settings_control_mouse_capture_sensitivity_title),
-                    value = AllSettings.mouseCaptureSensitivity.state,
-                    valueRange = AllSettings.mouseCaptureSensitivity.floatRange,
-                    onValueChange = { AllSettings.mouseCaptureSensitivity.updateState(it) },
-                    onValueChangeFinished = { AllSettings.mouseCaptureSensitivity.save(it) },
-                    suffix = "%"
-                )
-            }
-            item {
-                MenuSliderLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = stringResource(R.string.settings_control_mouse_long_press_delay_title),
-                    value = AllSettings.mouseLongPressDelay.state,
-                    valueRange = AllSettings.mouseLongPressDelay.floatRange,
-                    onValueChange = { AllSettings.mouseLongPressDelay.updateState(it) },
-                    onValueChangeFinished = { AllSettings.mouseLongPressDelay.save(it) },
-                    suffix = "ms"
-                )
-            }
-            item {
-                MenuSliderLayout(
-                    modifier = Modifier.fillMaxWidth(),
-                    title = stringResource(R.string.game_menu_option_menu_ball_opacity),
-                    value = AllSettings.menuBallOpacity.state,
-                    valueRange = AllSettings.menuBallOpacity.floatRange,
-                    onValueChange = { AllSettings.menuBallOpacity.updateState(it) },
-                    onValueChangeFinished = { AllSettings.menuBallOpacity.save(it) },
-                    suffix = "%"
-                )
-            }
-            item {
-                MenuTextButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.game_button_force_close),
-                    onClick = onQuit
-                )
-            }
-        }
         }
     }
 }
 
 /**
  * The game menu's "Mods" page: the built-in mods by category. A category has a switch for all
- * of its mods and opens to show them, each with its own switch. Everything starts off.
+ * of its mods and unfolds to show them, each with its own switch. Everything starts off.
  */
 @Composable
-private fun ModsPage(mods: RustMods, onBack: () -> Unit) {
+private fun ColumnScope.ModsPage(mods: RustMods, onBack: () -> Unit) {
     var open by remember { mutableStateOf(setOf<String>()) }
     // the game's own Options > Mods page may have changed the file
     LaunchedEffect(Unit) { mods.reload() }
-    Text(
-        modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
-        text = "Mods",
-        style = MaterialTheme.typography.titleMedium
-    )
+    ForgeHeader(title = "Mods", trail = stringResource(R.string.game_menu_title), onBack = onBack)
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(all = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding = PaddingValues(start = 14.dp, top = 4.dp, end = 12.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
         item {
-            MenuTextButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = "< Back",
-                onClick = onBack
-            )
+            ForgeReadout(text = "${RustMods.ALL.count { mods.isOn(it) }} of ${RustMods.ALL.size} mods on")
         }
-        item {
-            MenuTextButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = "Turn every mod off",
-                onClick = { mods.allOff() }
-            )
-        }
-        RustMods.CATEGORIES.forEach { category ->
+        RustMods.CATEGORIES.forEachIndexed { index, category ->
             val shown = category.title in open
+            val on = mods.countOn(category)
+            item { ForgeSection(index = index + 1, title = category.title) }
             item {
-                QolHeading(
-                    title = category.title,
-                    note = "${mods.countOn(category)} of ${category.mods.size} on"
-                )
-            }
-            item {
-                MenuSwitchButton(
+                ForgeSwitch(
                     modifier = Modifier.fillMaxWidth(),
-                    text = "All ${category.title} mods",
-                    switch = mods.countOn(category) > 0,
+                    text = "Whole category",
+                    note = "$on of ${category.mods.size} on",
+                    switch = on > 0,
                     onSwitch = { mods.setAll(category, it) }
                 )
             }
             item {
-                MenuTextButton(
+                ForgeButton(
                     modifier = Modifier.fillMaxWidth(),
-                    text = if (shown) "Hide the mods  ^" else "Show the mods  v",
+                    text = if (shown) "Fold" else "Pick mods one by one",
+                    mark = if (shown) "-" else "+",
                     onClick = { open = if (shown) open - category.title else open + category.title }
                 )
             }
             if (shown) {
                 category.mods.forEach { mod ->
                     item {
-                        MenuSwitchButton(
-                            modifier = Modifier.fillMaxWidth(),
-                            text = "${mod.name}: ${mod.about}",
+                        ForgeSwitch(
+                            modifier = Modifier.fillMaxWidth().padding(start = 12.dp),
+                            text = mod.name,
+                            note = mod.about,
                             switch = mods.isOn(mod),
                             onSwitch = { mods.setOn(mod, it) }
                         )
                     }
                 }
             }
+        }
+        item { ForgeSection(index = RustMods.CATEGORIES.size + 1, title = "Reset") }
+        item {
+            ForgeButton(
+                modifier = Modifier.fillMaxWidth(),
+                text = "Turn every mod off",
+                onClick = { mods.allOff() }
+            )
         }
     }
 }
@@ -773,33 +792,26 @@ private fun ModsPage(mods: RustMods, onBack: () -> Unit) {
  * feature's own page with its choices in sections.
  */
 @Composable
-private fun QolPage(qol: RustQol, onBack: () -> Unit) {
+private fun ColumnScope.QolPage(qol: RustQol, onBack: () -> Unit) {
     var open by remember { mutableStateOf<RustQol.Feature?>(null) }
     val feature = open
     // a feature's key may have switched it in the game since the page was last shown
     LaunchedEffect(Unit) { qol.reload() }
-    Text(
-        modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp),
-        text = if (feature == null) "QOL" else "QOL  >  ${feature.title}",
-        style = MaterialTheme.typography.titleMedium
+    ForgeHeader(
+        title = feature?.title ?: "QOL",
+        trail = if (feature == null) stringResource(R.string.game_menu_title) else "QOL",
+        onBack = { if (feature == null) onBack() else open = null }
     )
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(all = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding = PaddingValues(start = 14.dp, top = 4.dp, end = 12.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(5.dp)
     ) {
-        item {
-            MenuTextButton(
-                modifier = Modifier.fillMaxWidth(),
-                text = "< Back",
-                onClick = { if (feature == null) onBack() else open = null }
-            )
-        }
         if (feature == null) {
-            RustQol.FEATURES.forEach { each ->
-                item { QolHeading(title = each.title, note = each.summary) }
+            RustQol.FEATURES.forEachIndexed { index, each ->
+                item { ForgeSection(index = index + 1, title = each.title, note = each.summary) }
                 item {
-                    MenuSwitchButton(
+                    ForgeSwitch(
                         modifier = Modifier.fillMaxWidth(),
                         text = "Enabled",
                         switch = qol.isOn(each),
@@ -808,9 +820,10 @@ private fun QolPage(qol: RustQol, onBack: () -> Unit) {
                 }
                 if (each.sections.isNotEmpty()) {
                     item {
-                        MenuTextButton(
+                        ForgeButton(
                             modifier = Modifier.fillMaxWidth(),
-                            text = "${each.title} options  >",
+                            text = "Options",
+                            mark = ">",
                             onClick = { open = each }
                         )
                     }
@@ -818,20 +831,21 @@ private fun QolPage(qol: RustQol, onBack: () -> Unit) {
             }
         } else {
             item {
-                MenuSwitchButton(
+                ForgeSwitch(
                     modifier = Modifier.fillMaxWidth(),
                     text = "Enabled",
+                    note = feature.summary,
                     switch = qol.isOn(feature),
                     onSwitch = { qol.setOn(feature, it) }
                 )
             }
-            feature.sections.forEach { section ->
-                item { QolHeading(title = section.title, note = null) }
+            feature.sections.forEachIndexed { index, section ->
+                item { ForgeSection(index = index + 1, title = section.title) }
                 val switches = section.rows.count { it is RustQol.Switch }
                 if (switches > 2) {
                     item {
                         val all = section.rows.all { it !is RustQol.Switch || qol.isOn(it) }
-                        MenuTextButton(
+                        ForgeButton(
                             modifier = Modifier.fillMaxWidth(),
                             text = if (all) "Clear all" else "Select all",
                             onClick = { qol.setAll(section, !all) }
@@ -841,13 +855,13 @@ private fun QolPage(qol: RustQol, onBack: () -> Unit) {
                 section.rows.forEach { row ->
                     item {
                         when (row) {
-                            is RustQol.Switch -> MenuSwitchButton(
+                            is RustQol.Switch -> ForgeSwitch(
                                 modifier = Modifier.fillMaxWidth(),
                                 text = row.label,
                                 switch = qol.isOn(row),
                                 onSwitch = { qol.setOn(row, it) }
                             )
-                            is RustQol.KeyRow -> MenuListLayout(
+                            is RustQol.KeyRow -> ForgeList(
                                 modifier = Modifier.fillMaxWidth(),
                                 title = row.label,
                                 items = RustQol.KEYS,
@@ -855,7 +869,7 @@ private fun QolPage(qol: RustQol, onBack: () -> Unit) {
                                 onItemChange = { qol.setKey(row, it) },
                                 getItemText = { it.label }
                             )
-                            is RustQol.Slider -> MenuSliderLayout(
+                            is RustQol.Slider -> ForgeSlider(
                                 modifier = Modifier.fillMaxWidth(),
                                 title = row.label,
                                 value = qol.value(row),
@@ -868,29 +882,14 @@ private fun QolPage(qol: RustQol, onBack: () -> Unit) {
                     }
                 }
             }
-            item { QolHeading(title = "Reset", note = null) }
+            item { ForgeSection(index = feature.sections.size + 1, title = "Reset") }
             item {
-                MenuTextButton(
+                ForgeButton(
                     modifier = Modifier.fillMaxWidth(),
                     text = "Reset ${feature.title} options",
                     onClick = { qol.reset(feature) }
                 )
             }
-        }
-    }
-}
-
-/** A section's heading on the "QOL" page, with a line of explanation under a feature's */
-@Composable
-private fun QolHeading(title: String, note: String?) {
-    Column(modifier = Modifier.padding(start = 8.dp, top = 10.dp, end = 8.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary
-        )
-        if (note != null) {
-            Text(text = note, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
