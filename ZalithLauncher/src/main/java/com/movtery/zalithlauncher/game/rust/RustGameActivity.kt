@@ -42,11 +42,19 @@ class RustGameActivity : GameActivity() {
     private var catalog: RustCatalogDialog? = null
     private val handler = Handler(Looper.getMainLooper())
     private var resumed = false
+    private var pendingCatalog = -1
 
     /** Shows the controls once the game takes their input, and puts them away when it stops */
     private val watch = object : Runnable {
         override fun run() {
-            showControls(resumed && adapter.ready())
+            val ready = resumed && adapter.ready()
+            showControls(ready)
+            // asked for by the launcher ("Shader packs", "Resource packs"): once, when the game is up
+            if (ready && pendingCatalog >= 0) {
+                val shelf = pendingCatalog
+                pendingCatalog = -1
+                openCatalog(shelf)
+            }
             handler.postDelayed(this, WATCH_MILLIS)
         }
     }
@@ -55,6 +63,9 @@ class RustGameActivity : GameActivity() {
         super.onCreate(savedInstanceState)
         runCatching { loadAllSettings(this, true) }
         adapter.setEnabled(true)
+        if (savedInstanceState == null) {
+            pendingCatalog = intent?.getIntExtra(RustEdition.EXTRA_CATALOG, -1) ?: -1
+        }
     }
 
     /**
@@ -98,6 +109,7 @@ class RustGameActivity : GameActivity() {
                 onEditLayout = { file ->
                     startEditorActivity(this, file, RustControlEditorActivity::class.java)
                 },
+                onCatalog = { shelf -> openCatalog(shelf) },
                 onQuit = { finish() }
             ).also { overlay = it }
             if (!current.isShowing) {

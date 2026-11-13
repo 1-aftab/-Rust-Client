@@ -18,6 +18,7 @@
 
 package com.movtery.zalithlauncher.ui.screens.content.settings
 
+import com.movtery.zalithlauncher.rustOnly
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -130,7 +131,7 @@ fun AboutInfoScreen(
                         )
                         Text(
                             modifier = Modifier.padding(horizontal = 6.dp),
-                            text = stringResource(R.string.about_rust_client_motto),
+                            text = stringResource(if (rustOnly()) R.string.about_rust_lite_motto else R.string.about_rust_client_motto),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -138,7 +139,7 @@ fun AboutInfoScreen(
                             modifier = Modifier
                                 .padding(horizontal = 6.dp)
                                 .alpha(0.8f),
-                            text = stringResource(R.string.about_rust_client_story),
+                            text = stringResource(if (rustOnly()) R.string.about_rust_lite_story else R.string.about_rust_client_story),
                             style = MaterialTheme.typography.bodyMedium
                         )
                     }

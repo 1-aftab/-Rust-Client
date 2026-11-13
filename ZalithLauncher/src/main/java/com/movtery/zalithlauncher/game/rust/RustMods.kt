@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.game.rust
 
+import com.movtery.zalithlauncher.rustOnly
 import androidx.compose.runtime.mutableStateMapOf
 import java.io.File
 
@@ -85,7 +86,39 @@ class RustMods(gameFolder: File) {
         private const val PREFIX = "mod."
 
         // The ids are RustEngine/tools/builtin-mods.txt's: a mod added there gets a row here.
-        val CATEGORIES: List<Category> = listOf(
+        /** The mods Rust Client Lite's engine has (RustEngine/tools/builtin-mods-lite.txt) */
+        private val LITE: Set<String> = setOf(
+            "zoom",
+            "minimap",
+            "recipes",
+            "fps_overlay",
+            "appleskin",
+            "fullbright_horizon",
+            "mousetricks",
+            "armor_status",
+            "coords_hud",
+            "status_effect_hud",
+            "lookat",
+            "waypoints",
+            "inventory_profiles",
+            "shulker_peek",
+            "light_overlay",
+            "right_click_crops",
+            "veinminer",
+            "treefall"
+        )
+
+        val CATEGORIES: List<Category> by lazy {
+            if (!rustOnly()) {
+                EVERY_CATEGORY
+            } else {
+                EVERY_CATEGORY
+                    .map { it.copy(mods = it.mods.filter { mod -> mod.id in LITE }) }
+                    .filter { it.mods.isNotEmpty() }
+            }
+        }
+
+        private val EVERY_CATEGORY: List<Category> = listOf(
             Category(
                 "HUD",
                 listOf(
@@ -157,6 +190,6 @@ class RustMods(gameFolder: File) {
                 )
             )
         )
-        val ALL: List<Mod> = CATEGORIES.flatMap { it.mods }
+        val ALL: List<Mod> by lazy { CATEGORIES.flatMap { it.mods } }
     }
 }

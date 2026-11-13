@@ -19,6 +19,7 @@
 
 package com.movtery.zalithlauncher.game.rust
 
+import io.github.juanluci.starling.EngineCatalog
 import android.app.Activity
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -130,6 +131,8 @@ class RustControlsOverlay(
     /** The size of the game's window in pixels, which the pointer's place is given in */
     private val gameSize: () -> IntSize,
     private val onEditLayout: (File) -> Unit,
+    /** Opens the launcher's download screen for a shelf of the engine's catalog */
+    private val onCatalog: (Int) -> Unit,
     private val onQuit: () -> Unit
 ) : ComponentDialog(activity, android.R.style.Theme_Translucent_NoTitleBar) {
 
@@ -168,7 +171,7 @@ class RustControlsOverlay(
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnDetachedFromWindow)
                 setContent {
                     ZalithLauncherTheme {
-                        Overlay(adapter, state, gameSize, onEditLayout, onQuit)
+                        Overlay(adapter, state, gameSize, onEditLayout, onCatalog, onQuit)
                     }
                 }
             },
@@ -208,6 +211,7 @@ private fun Overlay(
     state: RustOverlayState,
     gameSize: () -> IntSize,
     onEditLayout: (File) -> Unit,
+    onCatalog: (Int) -> Unit,
     onQuit: () -> Unit
 ) {
     val captured = state.captured
@@ -389,6 +393,10 @@ private fun Overlay(
                 adapter.releaseAll()
                 hudEditor = true
             },
+            onCatalog = { shelf ->
+                adapter.releaseAll()
+                onCatalog(shelf)
+            },
             onQuit = onQuit
         )
 
@@ -465,6 +473,7 @@ private fun GameMenu(
     qol: RustQol,
     mods: RustMods,
     onMoveHud: () -> Unit,
+    onCatalog: (Int) -> Unit,
     onQuit: () -> Unit
 ) {
     // the "QOL" page takes the menu's place while it is open
@@ -549,6 +558,26 @@ private fun GameMenu(
                     onClick = {
                         close()
                         onMoveHud()
+                    }
+                )
+            }
+            item {
+                MenuTextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = stringResource(R.string.rust_lite_shader_packs),
+                    onClick = {
+                        close()
+                        onCatalog(EngineCatalog.SHELF_SHADER_PACKS)
+                    }
+                )
+            }
+            item {
+                MenuTextButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = stringResource(R.string.rust_lite_resource_packs),
+                    onClick = {
+                        close()
+                        onCatalog(EngineCatalog.SHELF_RESOURCE_PACKS)
                     }
                 )
             }

@@ -280,3 +280,19 @@ native mods off (`SERVICE_SUPPORTED`, `NATIVE_MODS_BUILD`).
   pointer. Its switch and sensitivity are also in the Rust game menu.
 - CI stores nothing as artifacts: APKs are uploaded to the release `latest-build`, and the
   engine passes between jobs through `actions/cache`.
+
+## Rust Client Lite
+
+A second app built from the same source with `-Dvariant=lite` (`RustClientLite-arm64-*.apk`,
+application id `io.github.aftab1.rustclient.lite`, so it installs next to Rust Client).
+
+- Only the Rust Edition: the Java runtimes, LWJGL, the Java components and the renderer
+  libraries are not packaged (`ZalithLauncher/build.gradle.kts`), and the launcher hides what
+  belongs to the Java Edition (`rustOnly()` in `Internal.kt`).
+- Its engine is built by `build_engine.py --variant lite`: the mods of
+  `RustEngine/tools/builtin-mods-lite.txt`, and `RUST_CLIENT_LITE` set, which makes the engine
+  ignore X-Ray and Trigger Bot (`rc_qol.rs`). CI builds it with the `release` profile (thin
+  LTO) and falls back to `fast` when that does not fit the runner; `engine.json` in the APK's
+  build log says which one was used.
+- The home card has Customise HUD (the launcher's `RustHudEditor`) and the shader pack and
+  resource pack downloads (the launcher's `RustCatalogDialog`, opened over the started game).

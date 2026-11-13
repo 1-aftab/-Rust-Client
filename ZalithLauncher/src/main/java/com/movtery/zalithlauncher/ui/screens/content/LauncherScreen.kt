@@ -18,6 +18,7 @@
 
 package com.movtery.zalithlauncher.ui.screens.content
 
+import com.movtery.zalithlauncher.rustOnly
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -396,7 +397,7 @@ private fun VersionsContent(
     toVersionSettingsScreen: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val edition = AllSettings.gameEdition.state
+    val edition = if (rustOnly()) GameEdition.RUST else AllSettings.gameEdition.state
     key(edition) {
         when (edition) {
             GameEdition.RUST -> RustVersionsContent(modifier = modifier)

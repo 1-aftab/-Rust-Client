@@ -1,5 +1,6 @@
 package com.movtery.zalithlauncher.game.rust
 
+import com.movtery.zalithlauncher.rustOnly
 import androidx.compose.runtime.mutableStateMapOf
 import java.io.File
 
@@ -129,7 +130,12 @@ class RustQol(gameFolder: File) {
             (0..9).map { KeyOption("key.keyboard.keypad.$it", "Numpad $it") }
 
         // The keys and what they start as are the engine's (rc_qol.rs: `Qol::off`, `XRAY_GROUPS`).
-        val FEATURES: List<Feature> = listOf(
+        // Rust Client Lite has Auto Sprint only (its engine ignores the rest as well).
+        val FEATURES: List<Feature> by lazy {
+            if (rustOnly()) EVERY_FEATURE.filter { it.key == "sprint" } else EVERY_FEATURE
+        }
+
+        private val EVERY_FEATURE: List<Feature> = listOf(
             Feature(
                 key = "sprint",
                 title = "Auto Sprint",

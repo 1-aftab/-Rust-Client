@@ -20,3 +20,9 @@ package com.movtery.zalithlauncher
 
 /** The name this launcher goes by */
 fun launcherName(): String = BuildKeys.LAUNCHER_NAME
+
+/**
+ * Rust Client Lite (built with -Dvariant=lite): the app that only has the Rust Edition.
+ * Nothing of the Java Edition is packaged in it, so nothing of it is shown either.
+ */
+fun rustOnly(): Boolean = BuildKeys.VARIANT == "lite"

@@ -1,0 +1,21 @@
+# The mods compiled into the engine of Rust Client Lite (build_engine.py --variant lite): the
+# ones that help in survival, a subset of builtin-mods.txt with the same pinned versions.
+# All are off until the player turns them on.
+zoom@2.0.0
+minimap@2.0.0
+recipes@2.0.0
+fps_overlay@2.0.0
+appleskin@0.1.3
+fullbright_horizon@1.0.0
+mousetricks@0.2.0
+armor_status@1.0.0
+coords_hud@2.0.0
+status_effect_hud@1.0.0
+lookat@0.2.1
+waypoints@1.1.0
+inventory_profiles@1.0.0
+shulker_peek@0.1.0
+light_overlay@1.0.0
+right_click_crops@1.0.1
+veinminer@0.3.0
+treefall@0.3.0

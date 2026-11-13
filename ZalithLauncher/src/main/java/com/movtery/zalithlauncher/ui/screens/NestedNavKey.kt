@@ -18,6 +18,7 @@
 
 package com.movtery.zalithlauncher.ui.screens
 
+import com.movtery.zalithlauncher.rustOnly
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.game.download.addon.platform.Platform
 import com.movtery.zalithlauncher.game.download.addon.platform.PlatformClasses
@@ -46,7 +47,7 @@ sealed interface NestedNavKey {
     /** 设置屏幕 */
     @Serializable class Settings : BackStackNavKey<TitledNavKey>(androidText(R.string.generic_setting)) {
         init {
-            backStack.addIfEmpty(NormalNavKey.Settings.Renderer)
+            backStack.addIfEmpty(if (rustOnly()) NormalNavKey.Settings.Control else NormalNavKey.Settings.Renderer)
         }
     }
     /** 版本详细设置屏幕 */

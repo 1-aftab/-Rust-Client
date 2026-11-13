@@ -111,7 +111,15 @@ object RustEdition {
      * and shows no account or skin screens of its own. The account's name and skin are
      * handed over here, at every start.
      */
-    fun launch(context: Context, account: Account?) {
+    /** Intent extra of [RustGameActivity]: the catalog shelf to open once the game is up */
+    const val EXTRA_CATALOG = "rust_client_catalog"
+
+    /**
+     * Starts the game. With [catalog] (a shelf of the engine's catalog: resource packs, shader
+     * packs) the launcher's download screen for it opens over the game as soon as it is up:
+     * the catalog is the engine's own, so it needs the engine running.
+     */
+    fun launch(context: Context, account: Account?, catalog: Int? = null) {
         runCatching { writeArguments(context, account?.username) }
         runCatching { writePlayer(context, account) }
         gameFolder(context).mkdirs()
@@ -119,6 +127,7 @@ object RustEdition {
         // window opens only once there is a game to show.
         val intent = if (EngineSetup.prepared(context)) {
             Intent(context, RustGameActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .apply { catalog?.let { putExtra(EXTRA_CATALOG, it) } }
         } else {
             RustSetupActivity.intent(context)
         }

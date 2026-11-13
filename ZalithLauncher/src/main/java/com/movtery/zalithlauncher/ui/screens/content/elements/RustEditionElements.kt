@@ -19,6 +19,10 @@
 
 package com.movtery.zalithlauncher.ui.screens.content.elements
 
+import io.github.juanluci.starling.EngineCatalog
+import com.movtery.zalithlauncher.game.rust.RustHudEditor
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -146,6 +150,102 @@ private fun EditionButton(
     } else {
         OutlinedButton(modifier = modifier, onClick = onClick) {
             Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/**
+ * Home screen card of Rust Client Lite, where the edition selector is in Rust Client: there is
+ * one edition, so the card holds what belongs to it. "Customise HUD" is the launcher's own
+ * editor (the frames are where the game last drew its HUD); the pack downloads are the
+ * launcher's screen over the engine's catalog, which needs the engine running, so they start
+ * the game and open over it.
+ */
+@Composable
+fun RustLiteCard(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val problem = remember { runCatching { RustEdition.problem(context) }.getOrNull() }
+    var hudEditor by remember { mutableStateOf(false) }
+    var shown by remember { mutableStateOf<RustEdition.Problem?>(null) }
+    shown?.let { current ->
+        RustEditionProblemDialog(problem = current, onDismiss = { shown = null })
+    }
+    val download: (Int) -> Unit = { shelf ->
+        if (problem != null) {
+            shown = problem
+        } else {
+            runCatching {
+                RustEdition.launch(
+                    context = context,
+                    account = AccountsManager.currentAccountFlow.value,
+                    catalog = shelf
+                )
+            }
+        }
+    }
+
+    BackgroundCard(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.game_edition_rust),
+                style = MaterialTheme.typography.titleSmall
+            )
+            Text(
+                modifier = Modifier.alpha(0.8f),
+                text = stringResource(
+                    R.string.rust_lite_summary,
+                    RustEdition.MINECRAFT_VERSION,
+                    RustEdition.ENGINE_NAME
+                ),
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (problem != null) {
+                Text(
+                    text = rustEditionProblemText(problem),
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(onClick = { hudEditor = true }) {
+                    Text(text = stringResource(R.string.rust_lite_customise_hud), maxLines = 1)
+                }
+                OutlinedButton(onClick = { download(EngineCatalog.SHELF_SHADER_PACKS) }) {
+                    Text(text = stringResource(R.string.rust_lite_shader_packs), maxLines = 1)
+                }
+                OutlinedButton(onClick = { download(EngineCatalog.SHELF_RESOURCE_PACKS) }) {
+                    Text(text = stringResource(R.string.rust_lite_resource_packs), maxLines = 1)
+                }
+            }
+            Text(
+                modifier = Modifier.alpha(0.8f),
+                text = stringResource(R.string.rust_lite_downloads_note),
+                style = MaterialTheme.typography.labelSmall
+            )
+            RustFolderRow()
+        }
+    }
+
+    if (hudEditor) {
+        Dialog(
+            onDismissRequest = { hudEditor = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            RustHudEditor(
+                gameFolder = remember(context) { RustEdition.gameFolder(context) },
+                onDone = { hudEditor = false }
+            )
         }
     }
 }

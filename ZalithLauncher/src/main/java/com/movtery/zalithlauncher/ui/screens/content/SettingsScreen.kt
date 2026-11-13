@@ -18,6 +18,7 @@
 
 package com.movtery.zalithlauncher.ui.screens.content
 
+import com.movtery.zalithlauncher.rustOnly
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -118,7 +119,12 @@ private val settingItems = listOf(
     CategoryItem(NormalNavKey.Settings.JavaManager, { CategoryIcon(R.drawable.ic_java, R.string.settings_tab_java_manage) }, R.string.settings_tab_java_manage, division = true),
     CategoryItem(NormalNavKey.Settings.ControlManager, { CategoryIcon(R.drawable.ic_videogame_asset_outlined, R.string.settings_tab_control_manage) }, R.string.settings_tab_control_manage),
     CategoryItem(NormalNavKey.Settings.AboutInfo, { CategoryIcon(R.drawable.ic_info_outlined, R.string.settings_tab_info_about) }, R.string.settings_tab_info_about, division = true)
-)
+).filterNot {
+    // Rust Client Lite: the Java Edition's pages (its renderers, its JVM, its runtimes) are put away
+    rustOnly() && (it.key == NormalNavKey.Settings.Renderer ||
+        it.key == NormalNavKey.Settings.Game ||
+        it.key == NormalNavKey.Settings.JavaManager)
+}
 
 @Composable
 private fun TabMenu(

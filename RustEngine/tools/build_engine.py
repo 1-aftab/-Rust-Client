@@ -178,14 +178,19 @@ def upstream():
     return module
 
 
-BUILTIN = MODULE / "tools" / "builtin-mods.txt"
+BUILTIN = {
+    "full": MODULE / "tools" / "builtin-mods.txt",
+    # Rust Client Lite: the mods useful in survival only.
+    "lite": MODULE / "tools" / "builtin-mods-lite.txt",
+}
 
 
-def builtin_mods():
-    """The mods compiled into the engine: `id@version`, as builtin-mods.txt lists them."""
-    if not BUILTIN.is_file():
+def builtin_mods(variant="full"):
+    """The mods compiled into the engine: `id@version`, as the variant's list has them."""
+    listed = BUILTIN[variant]
+    if not listed.is_file():
         return []
-    lines = (line.split("#")[0].strip() for line in BUILTIN.read_text(encoding="utf-8").splitlines())
+    lines = (line.split("#")[0].strip() for line in listed.read_text(encoding="utf-8").splitlines())
     return [line for line in lines if line]
 
 
@@ -241,6 +246,9 @@ def main():
                         choices=("arm64-v8a", "armeabi-v7a", "x86", "x86_64"))
     parser.add_argument("--profile", default="fast",
                         help="Cargo profile of upstream: fast (default, what its releases use), quick or release")
+    parser.add_argument("--variant", default="full", choices=("full", "lite"),
+                        help="full: every built-in mod, X-Ray and Trigger Bot; lite (Rust Client "
+                             "Lite): the survival mods, Auto Sprint only")
     parser.add_argument("--fetch-only", action="store_true",
                         help="fetch and patch the source, build nothing")
     args = parser.parse_args()
@@ -260,7 +268,10 @@ def main():
     triple = build_apk.TARGETS[args.abi][0]
 
     # 1. The game library: with the built-in mods when there are any (builtin-mods.txt).
-    mods = builtin_mods()
+    mods = builtin_mods(args.variant)
+    if args.variant == "lite":
+        # Read by the engine's rc_qol.rs (option_env!): no X-Ray, no Trigger Bot.
+        os.environ["RUST_CLIENT_LITE"] = "1"
     if mods:
         built = build_with_mods(mods, args.profile, args.abi, sdk)
     else:
@@ -300,6 +311,7 @@ def main():
         "commit": pins["commit"],
         "patches": patches,
         "mods": mods,
+        "variant": args.variant,
         "profile": args.profile,
         "abi": args.abi,
     }, indent=2) + "\n", encoding="utf-8")

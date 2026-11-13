@@ -33,6 +33,13 @@ val defaultCurseForgeApiKey = project.findProperty("curseforge_api_key") as? Str
 
 val projectArch: String = System.getProperty("arch", "all")
 
+// [Rust Client] -Dvariant=lite builds "Rust Client Lite": a second app (its own application
+// id, installable next to Rust Client) that only has the Rust Edition. Nothing of the Java
+// Edition is packaged: no Java runtimes, no LWJGL, no renderer libraries.
+val projectVariant: String = System.getProperty("variant", "full")
+val isLite = projectVariant == "lite"
+val appLabel = if (isLite) "$launcherAPPName Lite" else launcherAPPName
+
 fun getKeyFromLocal(envKey: String, fileName: String? = null, default: String? = null): String {
     val key = System.getenv(envKey)
     return key ?: fileName?.let {
@@ -146,12 +153,12 @@ android {
     }
 
     defaultConfig {
-        applicationId = launcherApplicationId
+        applicationId = if (isLite) "$launcherApplicationId.lite" else launcherApplicationId
         minSdk = 26
         targetSdk = 34
         versionCode = launcherVersionCode
         versionName = launcherVersionName
-        manifestPlaceholders["launcher_name"] = launcherAPPName
+        manifestPlaceholders["launcher_name"] = appLabel
     }
 
     buildTypes {
@@ -174,6 +181,11 @@ android {
 
     lint {
         checkReleaseBuilds = false
+    }
+
+    if (isLite) {
+        // every library there belongs to the Java Edition (renderers, JNA, pack200)
+        sourceSets["main"].jniLibs.setSrcDirs(emptyList<String>())
     }
 
     splits {
@@ -233,8 +245,16 @@ androidComponents {
                 afterEvaluate {
                     val task = tasks.named("merge${variantName}Assets").get() as MergeSourceSetFolders
                     task.inputs.property("lwjglArch", projectArch)
+                    task.inputs.property("rustClientVariant", projectVariant)
                     task.doLast {
                         val assetsDir = task.outputDir.get().asFile
+                        if (isLite) {
+                            listOf("runtimes", "app_runtime", "components").forEach {
+                                val dir = File(assetsDir, it)
+                                logger.lifecycle("[Lite] leaving out $dir: ${dir.deleteRecursively()}")
+                            }
+                            return@doLast
+                        }
                         val tag = "JREAssetsCleanup"
                         logger.lifecycle("[$tag] arch: $projectArch")
                         val jreList = listOf("jre-8", "jre-17", "jre-21", "jre-25")
@@ -292,7 +312,7 @@ androidComponents {
                 }
 
                 (output.getFilter(ABI)?.identifier ?: "all").let { abi ->
-                    val baseName = "$launcherName-${if (variant.buildType == "release") launcherVersionName else "Debug-$launcherVersionName"}"
+                    val baseName = "$launcherName${if (isLite) "Lite" else ""}-${if (variant.buildType == "release") launcherVersionName else "Debug-$launcherVersionName"}"
                     // [Rust Client] make it obvious that a release APK still has to be signed
                     val unsigned = variant.buildType == "release" && releaseStoreFile == null
                     val fullName = (if (abi == "all") baseName else "$baseName-$abi") +
@@ -316,7 +336,8 @@ kotlin {
 
 buildKeys {
     string("OAUTH_CLIENT_ID", getKeyFromLocal("OAUTH_CLIENT_ID", ".oauth_client_id.txt", defaultOAuthClientID), true)
-    string("LAUNCHER_NAME", launcherAPPName, true)
+    string("LAUNCHER_NAME", appLabel, true)
+    string("VARIANT", projectVariant)
     string("LAUNCHER_IDENTIFIER", launcherName, true)
     string("LAUNCHER_SHORT_NAME", launcherShortName, true)
     string("URL_HOME", launcherUrl, true)

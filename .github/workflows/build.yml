@@ -37,12 +37,27 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 170
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Rust Client: every built-in mod, X-Ray, Trigger Bot.
+          - variant: full
+            profile: fast
+            key: fast
+          # Rust Client Lite: the survival mods, Auto Sprint only, and the "release" profile
+          # (thin LTO, one codegen unit: the fastest game, the longest build). If that does
+          # not fit the runner the step falls back to "fast", so the app is still built.
+          - variant: lite
+            profile: release
+            key: lite
     env:
       ENGINE_ABI: arm64-v8a
+      ENGINE_VARIANT: ${{ matrix.variant }}
       # "fast" is the profile upstream's releases are built with: the whole game optimized
       # (opt-level 3). "quick" builds the game's own code at opt-level 1, which plays slower.
       # It needs more memory than a runner has: hence the swap below.
-      ENGINE_PROFILE: fast
+      ENGINE_PROFILE: ${{ matrix.profile }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -52,7 +67,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: RustEngine/prebuilt
-          key: rust-engine-${{ env.ENGINE_ABI }}-${{ env.ENGINE_PROFILE }}-${{ hashFiles('RustEngine/engine.lock', 'RustEngine/patches/**', 'RustEngine/tools/**') }}
+          key: rust-engine-${{ env.ENGINE_ABI }}-${{ matrix.key }}-${{ hashFiles('RustEngine/engine.lock', 'RustEngine/patches/**', 'RustEngine/tools/**') }}
 
       - name: Make room (the build with the built-in mods needs about 25 GB) and add swap
         if: steps.prebuilt.outputs.cache-hit != 'true'
@@ -101,7 +116,17 @@ jobs:
 
       - name: Build the engine
         if: steps.prebuilt.outputs.cache-hit != 'true'
-        run: python3 RustEngine/tools/build_engine.py --abi "$ENGINE_ABI" --profile "$ENGINE_PROFILE"
+        run: |
+          build() { python3 RustEngine/tools/build_engine.py --abi "$ENGINE_ABI" --variant "$ENGINE_VARIANT" --profile "$1"; }
+          if [ "$ENGINE_PROFILE" = "fast" ]; then
+            build fast
+          elif ! timeout -k 30 100m bash -c "$(declare -f build); build $ENGINE_PROFILE"; then
+            echo "::warning::The $ENGINE_PROFILE profile did not build on this runner; building $ENGINE_VARIANT with the fast profile instead."
+            pkill -9 -x cargo || true; pkill -9 -x rustc || true; sleep 5
+            rm -rf RustEngine/prebuilt
+            find ~/.cache/starling-native -maxdepth 4 -type d -name "$ENGINE_PROFILE" -exec rm -rf {} + || true
+            build fast
+          fi
 
       # No artifact: the account's artifact storage is limited. The cache step above saves
       # RustEngine/prebuilt when this job ends, and build-rust restores it by the same key.
@@ -180,5 +205,45 @@ jobs:
         uses: ./.github/actions/build-apk
         with:
           arch: ${{ matrix.arch }}
+          variant: ${{ inputs.variant }}
+          token: ${{ github.token }}
+
+  # Rust Client Lite: a second app with the Rust Edition only (ARM64, like its engine).
+  build-lite:
+    needs: engine
+    if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    env:
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+      OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+      CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Restore the built engine
+        uses: actions/cache/restore@v4
+        with:
+          path: RustEngine/prebuilt
+          key: rust-engine-arm64-v8a-lite-${{ hashFiles('RustEngine/engine.lock', 'RustEngine/patches/**', 'RustEngine/tools/**') }}
+          fail-on-cache-miss: true
+
+      - name: Show the engine
+        run: |
+          cat RustEngine/prebuilt/engine.json
+          grep -q '"variant": "lite"' RustEngine/prebuilt/engine.json
+
+      - name: Build
+        uses: ./.github/actions/build-apk
+        with:
+          arch: arm64
+          app: lite
           variant: ${{ inputs.variant }}
           token: ${{ github.token }}

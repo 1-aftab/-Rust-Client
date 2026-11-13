@@ -18,6 +18,7 @@
 
 package com.movtery.zalithlauncher.ui.activities
 
+import com.movtery.zalithlauncher.rustOnly
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -203,6 +204,8 @@ class SplashActivity : BaseAppCompatActivity() {
     }
 
     private fun initUnpackItems() {
+        // Rust Client Lite: no Java runtime and no Java components to unpack
+        if (rustOnly()) return
         Components.entries.forEach { component ->
             val task = UnpackComponentsTask(this@SplashActivity, component)
             unpackItems.add(

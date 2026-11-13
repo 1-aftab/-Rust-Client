@@ -18,6 +18,8 @@
 
 package com.movtery.zalithlauncher.ui.screens.content.home
 
+import com.movtery.zalithlauncher.ui.screens.content.elements.RustLiteCard
+import com.movtery.zalithlauncher.rustOnly
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -108,7 +110,7 @@ object HomeCards {
      * Rust Client: the Java Edition / Rust Edition selector.
      */
     private fun gameEditionCard() = SystemCard(id = "system_game_edition") {
-        GameEditionCard()
+        if (rustOnly()) RustLiteCard() else GameEditionCard()
     }
 
     /**

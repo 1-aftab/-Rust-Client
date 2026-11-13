@@ -8,6 +8,10 @@ inputs:
   variant:
     description: "Debug or Release"
     required: true
+  app:
+    description: "full (Rust Client) or lite (Rust Client Lite: the Rust Edition only)"
+    required: false
+    default: "full"
   token:
     description: "Token that may write releases: the APK is published to the release 'latest-build'"
     required: false
@@ -67,7 +71,7 @@ runs:
       shell: bash
       run: |
         chmod +x gradlew
-        ./gradlew ZalithLauncher:assemble${{ inputs.variant }} -Darch=${{ inputs.arch }}
+        ./gradlew ZalithLauncher:assemble${{ inputs.variant }} -Darch=${{ inputs.arch }} -Dvariant=${{ inputs.app }}
 
     - name: Upload Release APK for ${{ inputs.arch }}
       if: inputs.variant == 'Release'
@@ -97,12 +101,13 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
         GH_REPO: ${{ github.repository }}
         ARCH: ${{ inputs.arch }}
+        APP: ${{ inputs.app }}
         VARIANT: ${{ inputs.variant }}
         BRANCH: ${{ github.ref_name }}
       run: |
         kind=$(echo "$VARIANT" | tr '[:upper:]' '[:lower:]')
         apk=$(ls ZalithLauncher/build/outputs/apk/$kind/*.apk | head -1)
-        name="RustClient-$ARCH-$kind.apk"
+        if [ "$APP" = "lite" ]; then name="RustClientLite-$ARCH-$kind.apk"; else name="RustClient-$ARCH-$kind.apk"; fi
         cp "$apk" "$RUNNER_TEMP/$name"
         gh release view latest-build >/dev/null 2>&1 || gh release create latest-build \
           --prerelease --latest=false --target "$GITHUB_SHA" --title "Latest build" \

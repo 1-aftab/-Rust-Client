@@ -315,15 +315,19 @@ index de665ba..7f575e3 100644
      }) {
 diff --git a/crates/horizon-client/src/rc_qol.rs b/crates/horizon-client/src/rc_qol.rs
 new file mode 100644
-index 0000000..7d9b343
+index 0000000..f3dc046
 --- /dev/null
 +++ b/crates/horizon-client/src/rc_qol.rs
-@@ -0,0 +1,209 @@
+@@ -0,0 +1,220 @@
 +//! Rust Client: the quality-of-life switches. The launcher's "QOL" page writes them to
 +//! `rust-client-qol.txt` in the game folder (`key=value` lines); the game reads the file
 +//! again twice a second, so a switch acts at once. Everything is off without the file.
 +use std::sync::RwLock;
 +use std::sync::atomic::{AtomicU32, Ordering};
++
++/// Rust Client Lite (the engine built with `RUST_CLIENT_LITE` set): Auto Sprint is all there
++/// is; X-Ray and Trigger Bot stay off whatever the file says, and have no keys.
++pub const LITE: bool = option_env!("RUST_CLIENT_LITE").is_some();
 +
 +/// The file, in the game folder (the working directory).
 +pub const FILE: &str = "rust-client-qol.txt";
@@ -437,6 +441,10 @@ index 0000000..7d9b343
 +                }
 +            }
 +        }
++        if LITE {
++            q.xray = false;
++            q.trigger = false;
++        }
 +        q
 +    }
 +}
@@ -467,6 +475,9 @@ index 0000000..7d9b343
 +/// A key went down while playing: X-Ray's or Trigger Bot's key switches it, in the file too
 +/// (the launcher's page shows the file). Whether it was one of them.
 +pub fn key_pressed(key: &str) -> bool {
++    if LITE {
++        return false;
++    }
 +    let name = {
 +        let keys = KEYS.read().unwrap_or_else(|e| e.into_inner());
 +        if !keys.0.is_empty() && keys.0 == key {

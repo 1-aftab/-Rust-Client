@@ -18,6 +18,7 @@
 
 package com.movtery.zalithlauncher.ui.screens.main
 
+import com.movtery.zalithlauncher.rustOnly
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -312,6 +313,8 @@ private fun <E: TitledNavKey> TopBar(
 
             Spacer(modifier = Modifier.weight(1f))
 
+            // Rust Client Lite: the downloads and the multiplayer page are the Java Edition's
+            if (!rustOnly()) {
             SideRailItem(
                 selected = inDownloadScreen,
                 painter = painterResource(R.drawable.ic_download_2_filled),
@@ -328,6 +331,7 @@ private fun <E: TitledNavKey> TopBar(
                     if (!inMultiplayerScreen) toMultiplayerScreen()
                 }
             )
+            }
             SideRailItem(
                 selected = false,
                 painter = painterResource(R.drawable.ic_folder_filled),
